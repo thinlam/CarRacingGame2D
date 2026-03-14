@@ -1,62 +1,75 @@
 package com.carracinggame.car;
 
+import com.carracinggame.core.GameConfig;
 import com.carracinggame.input.InputHandler;
 import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 
 public class PlayerCar extends Car {
 
-    private final InputHandler input;
+    private final double minSpeed;
+    private double currentSpeed;
 
-    private final double accel = 0.18;
-    private final double brake = 0.30;
-    private final double friction = 0.06;
-    private final double maxSpeed = 6.5;
-    private final double reverseMax = 2.8;     // tốc độ lùi tối đa
-    private final double turnSpeedDeg = 3.2;
+    public PlayerCar(double x, double y, CarDefinition definition) {
+        super(x, y, GameConfig.CAR_WIDTH, GameConfig.CAR_HEIGHT, definition);
+        this.minSpeed = Math.max(130, definition.getStats().getMaxSpeed() * 0.42);
+        this.currentSpeed = minSpeed;
+    }
 
-    public PlayerCar(double x, double y, double w, double h, Image sprite, InputHandler input) {
-        super(x, y, w, h, sprite);
-        this.input = input;
-
-        this.angleDeg = 0; // ảnh của bạn đầu xe hướng lên -> 0° là chuẩn
-        this.speed = 0;
+    public PlayerCar(double playerStartX, double playerStartY, double carW, double carH, Image carSprite, InputHandler input) {
+        super();
     }
 
     public void update() {
-        // xoay (thường chỉ cho xoay khi xe đang chạy để "thật" hơn)
-        if (Math.abs(speed) > 0.05) {
-            if (input.isDown(KeyCode.LEFT))  angleDeg -= turnSpeedDeg;
-            if (input.isDown(KeyCode.RIGHT)) angleDeg += turnSpeedDeg;
-        }
+        CarStats stats = definition.getStats();
 
-        boolean up = input.isDown(KeyCode.UP);
-        boolean down = input.isDown(KeyCode.DOWN);
+        boolean accelerate = input.isPressed(KeyCode.UP) || input.isPressed(KeyCode.W);
+        boolean brake = input.isPressed(KeyCode.DOWN) || input.isPressed(KeyCode.S);
+        boolean left = input.isPressed(KeyCode.LEFT) || input.isPressed(KeyCode.A);
+        boolean right = input.isPressed(KeyCode.RIGHT) || input.isPressed(KeyCode.D);
 
-        // UP: tăng tốc tiến
-        if (up && !down) {
-            speed += accel;
-
-            // DOWN: phanh trước, chỉ lùi khi đã dừng/đang lùi
-        } else if (down && !up) {
-            if (speed > 0) {
-                speed = Math.max(0, speed - brake); // phanh về 0
-            } else {
-                speed = Math.max(-reverseMax, speed - accel); // lùi chậm
-            }
-
-            // không bấm gì: ma sát
+        if (accelerate) {
+            currentSpeed = Math.min(stats.getMaxSpeed(), currentSpeed + stats.getAcceleration() * deltaTime);
         } else {
-            if (speed > 0) speed = Math.max(0, speed - friction);
-            if (speed < 0) speed = Math.min(0, speed + friction);
+            currentSpeed = Math.max(minSpeed, currentSpeed - stats.getAcceleration() * 0.45 * deltaTime);
         }
 
-        // clamp tốc độ tiến
-        if (speed > maxSpeed) speed = maxSpeed;
+        if (brake) {
+            currentSpeed = Math.max(90, currentSpeed - stats.getAcceleration() * 1.10 * deltaTime);
+        }
 
-        // di chuyển theo góc (0° = lên)
-        double rad = Math.toRadians(angleDeg);
-        x += Math.sin(rad) * speed;
-        y -= Math.cos(rad) * speed;
+        double laneShift = stats.getHandling() * deltaTime;
+        if (left) {
+            x -= laneShift;
+        }
+        if (right) {
+            x += laneShift;
+        }
+
+        clampToScreen();
+    }
+
+    private void clampToScreen() {
+        double minX = GameConfig.ROAD_X + 14;
+        double maxX = GameConfig.ROAD_X + GameConfig.ROAD_WIDTH - width - 14;
+        if (x < minX) {
+            x = minX;
+        }
+        if (x > maxX) {
+            x = maxX;
+        }
+    }
+
+    public void penalizeCollision() {
+        currentSpeed = Math.max(85, currentSpeed * 0.55);
+    }
+
+    public void resetPosition() {
+        this.x = GameConfig.PLAYER_START_X;
+        this.currentSpeed = minSpeed;
+    }
+
+    public double getCurrentSpeed() {
+        return currentSpeed;
     }
 }

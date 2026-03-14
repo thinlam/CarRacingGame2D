@@ -20,10 +20,10 @@ public class MenuScene implements AppScene {
     private final Game game;
     private final Scene scene;
 
-    // Demo (sau này lấy từ Player/DB)
-    private int coins = 47325;
-
     private Label coinValue;
+    private Label playerNameValue;
+    private Label equippedCarValue;
+    private Label selectedMapValue;
 
     public MenuScene(Game game) {
         this.game = game;
@@ -31,17 +31,15 @@ public class MenuScene implements AppScene {
         BorderPane root = new BorderPane();
         root.setPrefSize(GameConfig.WIDTH, GameConfig.HEIGHT);
 
-        // Background lobby
         root.setStyle("""
             -fx-background-color: linear-gradient(to bottom, #7fd2ff 0%, #bfe9ff 40%, #e7f7ff 100%);
         """);
 
-        // ===== TOP BAR: Profile (left) + Coin (right)
         HBox topBar = new HBox(12);
         topBar.setPadding(new Insets(14, 14, 10, 14));
         topBar.setAlignment(Pos.CENTER_LEFT);
 
-        Node profileCard = buildProfileCard("Player"); // placeholder
+        Node profileCard = buildProfileCard();
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         Node coinBar = buildCoinBar();
@@ -49,7 +47,6 @@ public class MenuScene implements AppScene {
         topBar.getChildren().addAll(profileCard, spacer, coinBar);
         root.setTop(topBar);
 
-        // ===== CENTER: Character placeholder + Car placeholder
         StackPane center = new StackPane();
         center.setPadding(new Insets(10));
 
@@ -59,7 +56,6 @@ public class MenuScene implements AppScene {
         stage.setFill(Color.rgb(255, 255, 255, 0.35));
         stage.setStroke(Color.rgb(255, 255, 255, 0.45));
 
-        // Car placeholder (sau này thay bằng ảnh xe đang chọn)
         Rectangle car = new Rectangle(240, 95);
         car.setArcWidth(28);
         car.setArcHeight(28);
@@ -68,43 +64,54 @@ public class MenuScene implements AppScene {
         car.setTranslateX(-90);
         car.setTranslateY(70);
 
-        // Character placeholder (sau này thay bằng sprite nhân vật)
         VBox character = new VBox(10);
         character.setAlignment(Pos.CENTER);
+
         Circle head = new Circle(44, Color.rgb(255, 235, 200));
         head.setStroke(Color.rgb(0, 0, 0, 0.15));
+
         Rectangle body = new Rectangle(130, 190);
         body.setArcWidth(26);
         body.setArcHeight(26);
         body.setFill(Color.rgb(255, 220, 80));
         body.setStroke(Color.rgb(0, 0, 0, 0.12));
-        Label hint = new Label("Nhân vật (placeholder)");
-        hint.setStyle("-fx-font-size: 12px; -fx-text-fill: #0d2b4f; -fx-font-weight: 700;");
-        character.getChildren().addAll(head, body, hint);
 
+        Label hint = new Label("Nhân vật / xe hiện tại (placeholder)");
+        hint.setStyle("-fx-font-size: 12px; -fx-text-fill: #0d2b4f; -fx-font-weight: 700;");
+
+        equippedCarValue = new Label();
+        equippedCarValue.setStyle("-fx-font-size: 13px; -fx-text-fill: #0d2b4f; -fx-font-weight: 900;");
+
+        selectedMapValue = new Label();
+        selectedMapValue.setStyle("-fx-font-size: 12px; -fx-text-fill: #204a73; -fx-font-weight: 800;");
+
+        character.getChildren().addAll(head, body, hint, equippedCarValue, selectedMapValue);
         character.setTranslateX(80);
         character.setTranslateY(20);
 
         center.getChildren().addAll(stage, car, character);
         root.setCenter(center);
 
-        // ===== RIGHT ACTIONS: Start Race + Shop
         VBox actions = new VBox(12);
-        actions.setPadding(new Insets(110, 16, 16, 16));
+        actions.setPadding(new Insets(90, 16, 16, 16));
         actions.setAlignment(Pos.TOP_RIGHT);
 
         Button btnStart = bigAction("🏁  Start Race", "#35c88b");
-        Button btnShop  = bigAction("🛒  Shop", "#3aa0ff");
-        Button btnProfile = bigAction("👤  Profile", "#a35dff"); // placeholder
+        Button btnShop = bigAction("🛒  Shop", "#3aa0ff");
+        Button btnGarage = bigAction("🚗  Garage", "#ff8c42");
+        Button btnBonus = bigAction("🪙  +500 Coin", "#a35dff");
+
         btnStart.setOnAction(e -> game.switchState(GameState.MAP_SELECT));
-
         btnShop.setOnAction(e -> game.switchState(GameState.SHOP));
-        btnProfile.setOnAction(e -> comingSoon("Profile"));
+        btnGarage.setOnAction(e -> game.switchState(GameState.GARAGE));
+        btnBonus.setOnAction(e -> {
+            game.getPlayerProfile().addCoins(500);
+            refreshData();
+        });
 
-        actions.getChildren().addAll(btnStart, btnShop, btnProfile);
+        actions.getChildren().addAll(btnStart, btnShop, btnGarage, btnBonus);
         root.setRight(actions);
 
-        // ===== BOTTOM NAV (gọn): Home / Shop / Garage
         HBox bottom = new HBox(10);
         bottom.setPadding(new Insets(10, 14, 14, 14));
         bottom.setAlignment(Pos.CENTER_LEFT);
@@ -116,12 +123,15 @@ public class MenuScene implements AppScene {
         Button home = navBtn("🏠 Home");
         Button shop = navBtn("🛒 Shop");
         Button garage = navBtn("🚗 Garage");
+        Button map = navBtn("🗺 Map");
 
-        home.setOnAction(e -> {}); // đang ở Home
+        home.setOnAction(e -> {
+        });
         shop.setOnAction(e -> game.switchState(GameState.SHOP));
-        garage.setOnAction(e -> game.switchState(GameState.GARAGE)); // nếu chưa làm GARAGE thì sẽ lỗi -> làm placeholder trong Game
+        garage.setOnAction(e -> game.switchState(GameState.GARAGE));
+        map.setOnAction(e -> game.switchState(GameState.MAP_SELECT));
 
-        bottom.getChildren().addAll(home, shop, garage);
+        bottom.getChildren().addAll(home, shop, garage, map);
         root.setBottom(bottom);
 
         this.scene = new Scene(root, GameConfig.WIDTH, GameConfig.HEIGHT);
@@ -134,14 +144,15 @@ public class MenuScene implements AppScene {
 
     @Override
     public void onShow() {
-        refreshCoins();
+        refreshData();
         scene.getRoot().requestFocus();
     }
 
     @Override
-    public void onHide() {}
+    public void onHide() {
+    }
 
-    private Node buildProfileCard(String name) {
+    private Node buildProfileCard() {
         HBox card = new HBox(10);
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(10, 12, 10, 12));
@@ -156,14 +167,16 @@ public class MenuScene implements AppScene {
         avatar.setStroke(Color.rgb(255, 255, 255, 0.7));
 
         VBox info = new VBox(2);
-        Label n = new Label(name);
-        n.setStyle("-fx-font-size: 15px; -fx-font-weight: 900; -fx-text-fill: #0d2b4f;");
-        Label sub = new Label("Profile (mốt update thêm)");
+
+        playerNameValue = new Label();
+        playerNameValue.setStyle("-fx-font-size: 15px; -fx-font-weight: 900; -fx-text-fill: #0d2b4f;");
+
+        Label sub = new Label("Menu chính - Hữu Hải");
         sub.setStyle("-fx-font-size: 12px; -fx-text-fill: #204a73;");
 
-        info.getChildren().addAll(n, sub);
-
+        info.getChildren().addAll(playerNameValue, sub);
         card.getChildren().addAll(avatar, info);
+
         return card;
     }
 
@@ -188,6 +201,7 @@ public class MenuScene implements AppScene {
 
         Label icon = new Label("🪙");
         icon.setStyle("-fx-font-size: 14px;");
+
         Label label = new Label("Coin:");
         label.setStyle("-fx-font-size: 12px; -fx-text-fill: #0d2b4f; -fx-font-weight: 800;");
 
@@ -195,8 +209,8 @@ public class MenuScene implements AppScene {
         coinValue.setStyle("-fx-font-size: 12px; -fx-text-fill: #0d2b4f; -fx-font-weight: 900;");
 
         coinPill.getChildren().addAll(icon, label, coinValue);
-
         bar.getChildren().addAll(coinPill);
+
         return bar;
     }
 
@@ -226,15 +240,37 @@ public class MenuScene implements AppScene {
         return b;
     }
 
-    private void refreshCoins() {
-        if (coinValue != null) coinValue.setText(String.valueOf(coins));
+    private void refreshData() {
+        if (coinValue != null) {
+            coinValue.setText(String.valueOf(game.getPlayerProfile().getCoins()));
+        }
+
+        if (playerNameValue != null) {
+            playerNameValue.setText(game.getPlayerProfile().getPlayerName());
+        }
+
+        if (equippedCarValue != null) {
+            equippedCarValue.setText("Xe hiện tại: " + game.getGarageService().getEquippedCar().getName());
+        }
+
+        if (selectedMapValue != null) {
+            selectedMapValue.setText("Map hiện tại: " + toDisplayName());
+        }
+    }
+
+    private String toDisplayName() {
+        return switch (game.getSelectedMap()) {
+            case NORTH -> "Miền Bắc";
+            case CENTRAL -> "Miền Trung";
+            case SOUTH -> "Miền Nam";
+        };
     }
 
     private void comingSoon(String feature) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Coming soon");
         alert.setHeaderText(null);
-        alert.setContentText(feature + " mốt update thêm.");
+        alert.setContentText(feature + " sẽ được cập nhật thêm.");
         alert.showAndWait();
     }
 }
