@@ -9,12 +9,24 @@ import javafx.stage.Stage;
 
 public class MainApp extends Application {
 
+    public static final double APP_WIDTH = 1280;
+    public static final double APP_HEIGHT = 720;
+
     @Override
     public void start(Stage stage) {
         try {
             MongoDBConnection.init();
 
             stage.setTitle("Car Racing Game 2D");
+
+            // Cố định kích thước cửa sổ
+            stage.setWidth(APP_WIDTH);
+            stage.setHeight(APP_HEIGHT);
+            stage.setMinWidth(APP_WIDTH);
+            stage.setMinHeight(APP_HEIGHT);
+            stage.setMaxWidth(APP_WIDTH);
+            stage.setMaxHeight(APP_HEIGHT);
+            stage.setResizable(false);
 
             stage.setScene(LoginScene.create(stage, () -> {
                 Game game = new Game(stage);
