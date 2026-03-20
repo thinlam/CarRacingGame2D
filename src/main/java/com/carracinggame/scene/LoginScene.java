@@ -51,7 +51,6 @@ public class LoginScene {
         StackPane root = new StackPane();
         root.getStyleClass().add("login-root");
 
-        // Background image
         URL bgUrl = getClass().getResource("/images/cars/ui/login-bg.jpg");
         if (bgUrl != null) {
             ImageView bgView = new ImageView(new Image(bgUrl.toExternalForm()));
@@ -72,32 +71,24 @@ public class LoginScene {
         hudLayer.setMouseTransparent(true);
 
         ProgressBar syncBar = new ProgressBar(0.72);
-        syncBar.setPrefWidth(102);
         syncBar.getStyleClass().add("sync-bar");
 
         Label syncLabel = new Label("SYNCING DATA...");
         syncLabel.getStyleClass().add("hud-label");
 
-        HBox topHud = new HBox(10, syncBar, syncLabel);
         topHud.setAlignment(Pos.TOP_RIGHT);
-        BorderPane.setMargin(topHud, new Insets(28, 34, 0, 0));
         hudLayer.setTop(topHud);
 
         VBox bottomHud = new VBox(
-                6,
                 hudText("SYSTEM STATUS: OPTIMAL"),
                 hudText("CONNECTION: LATENCY 14MS"),
                 hudText("VER: 2.04.11_NEON")
         );
         bottomHud.setAlignment(Pos.BOTTOM_LEFT);
-        BorderPane.setMargin(bottomHud, new Insets(0, 0, 28, 34));
         hudLayer.setBottom(bottomHud);
 
-        VBox card = new VBox(14);
         card.getStyleClass().add("glass-card");
         card.setAlignment(Pos.TOP_CENTER);
-        card.setPrefWidth(460);
-        card.setMaxWidth(460);
         card.setFillWidth(true);
 
         Text titleWhite = new Text("RACE ");
@@ -122,8 +113,6 @@ public class LoginScene {
         forgotKeyLabel = new Label("FORGOT KEY?");
         forgotKeyLabel.getStyleClass().add("forgot-link");
 
-        HBox passwordHeader = new HBox(passLabel, new Region(), forgotKeyLabel);
-        HBox.setHgrow(passwordHeader.getChildren().get(1), Priority.ALWAYS);
         passwordHeader.setAlignment(Pos.CENTER_LEFT);
 
         passwordField = new PasswordField();
@@ -135,14 +124,11 @@ public class LoginScene {
         confirmField.setPromptText("Confirm password");
         HBox confirmBox = createInputShell("◈", confirmField);
 
-        confirmGroup = new VBox(8, confirmLabel, confirmBox);
         confirmGroup.setVisible(false);
-        confirmGroup.managedProperty().bind(confirmGroup.visibleProperty());
 
         CheckBox rememberBox = new CheckBox("STAY AUTHENTICATED");
         rememberBox.getStyleClass().add("remember-box");
 
-        actionButton = new Button("START ENGINE");
         actionButton.getStyleClass().add("primary-btn");
         actionButton.setMaxWidth(Double.MAX_VALUE);
 
@@ -152,21 +138,13 @@ public class LoginScene {
 
         HBox divider = createDivider("EXTERNAL LINKUPS");
 
-        Button githubBtn = socialButton("/images/cars/ui/github.png");
-        githubBtn.setOnAction(e -> openLink("https://web.facebook.com/profile.php?id=100054360498935"));
 
-        Button googleBtn = socialButton("/images/cars/ui/google.png");
-        googleBtn.setOnAction(e -> openLink("https://www.tiktok.com/@dane.ee_17?_r=1&_t=ZS-94fjFVJqcUy"));
 
         Button discordBtn = socialButton("/images/cars/ui/discord.png");
-        discordBtn.setOnAction(e -> openLink("https://discord.gg/j5TVgbuaZh"));
 
-        HBox socialRow = new HBox(16, githubBtn, googleBtn, discordBtn);
         socialRow.setAlignment(Pos.CENTER);
 
         HBox footerRow = new HBox(
-                28,
-                footerText("FACEBOOK"),
                 footerText("PRIVACY"),
                 footerText("SUPPORT")
         );
@@ -179,10 +157,8 @@ public class LoginScene {
         switchLink.getStyleClass().add("switch-link");
         switchLink.setBorder(Border.EMPTY);
         switchLink.setPadding(Insets.EMPTY);
-
         switchLink.setOnAction(e -> setMode(!registerMode));
 
-        HBox switchBox = new HBox(6, helperLabel, switchLink);
         switchBox.setAlignment(Pos.CENTER);
 
         actionButton.setOnAction(e -> handleSubmit());
@@ -193,25 +169,20 @@ public class LoginScene {
         card.getChildren().addAll(
                 titleFlow,
                 subtitle,
-                spacer(8),
                 userLabel,
                 usernameBox,
                 passwordHeader,
                 passwordBox,
                 confirmGroup,
                 rememberBox,
-                spacer(4),
                 actionButton,
                 messageLabel,
-                spacer(10),
                 divider,
                 socialRow,
                 footerRow,
-                spacer(6),
                 switchBox
         );
 
-        root.getChildren().addAll(overlay, hudLayer, card);
 
         Scene scene = new Scene(root, 1366, 768);
         scene.getStylesheets().add(
@@ -285,7 +256,6 @@ public class LoginScene {
             forgotKeyLabel.setVisible(false);
             forgotKeyLabel.setManaged(false);
         } else {
-            actionButton.setText("START ENGINE");
             helperLabel.setText("Chưa có tài khoản?");
             switchLink.setText("Đăng ký");
             forgotKeyLabel.setVisible(true);
@@ -301,7 +271,6 @@ public class LoginScene {
         Label icon = new Label(iconText);
         icon.getStyleClass().add("input-icon");
 
-        HBox shell = new HBox(12, icon, field);
         shell.getStyleClass().add("input-shell");
         shell.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(field, Priority.ALWAYS);
@@ -321,17 +290,11 @@ public class LoginScene {
         right.getStyleClass().add("divider-line");
         HBox.setHgrow(right, Priority.ALWAYS);
 
-        HBox box = new HBox(12, left, center, right);
         box.setAlignment(Pos.CENTER);
         return box;
     }
 
     private Button socialButton(String iconPath) {
-        ImageView icon = new ImageView(
-                new Image(getClass().getResourceAsStream(iconPath))
-        );
-        icon.setFitWidth(30);
-        icon.setFitHeight(30);
         icon.setPreserveRatio(true);
         icon.setSmooth(true);
 
@@ -340,7 +303,6 @@ public class LoginScene {
         btn.getStyleClass().add("social-btn");
         btn.setFocusTraversable(false);
         btn.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
-
         return btn;
     }
 
@@ -376,9 +338,6 @@ public class LoginScene {
     }
 
     private Region spacer(double height) {
-        Region r = new Region();
-        r.setMinHeight(height);
-        return r;
     }
 
     private void showMessage(String text, String color) {
