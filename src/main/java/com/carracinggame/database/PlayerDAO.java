@@ -7,6 +7,7 @@ import org.bson.Document;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Date;
 
 import static com.mongodb.client.model.Filters.eq;
@@ -16,8 +17,18 @@ public class PlayerDAO {
     private final MongoCollection<Document> players =
             MongoDBConnection.getPlayersCollection();
 
+    // Hàm cũ giữ lại để tránh lỗi code cũ
     public boolean registerAccount(String username, String rawPassword) {
+        return registerAccount(username, rawPassword, "", "helmet_a");
+    }
+
+    // Hàm mới: đăng ký có email + avatar
+    public boolean registerAccount(String username, String rawPassword, String email, String selectedAvatar) {
         username = username == null ? "" : username.trim();
+        email = email == null ? "" : email.trim();
+        selectedAvatar = selectedAvatar == null || selectedAvatar.isBlank()
+                ? "helmet_a"
+                : selectedAvatar.trim();
 
         if (username.isEmpty() || rawPassword == null || rawPassword.isEmpty()) {
             return false;
@@ -30,7 +41,10 @@ public class PlayerDAO {
 
         Document doc = new Document("username", username)
                 .append("passwordHash", hashPassword(rawPassword))
+                .append("email", email)
                 .append("coins", 1000)
+                .append("selectedAvatar", selectedAvatar)
+                .append("ownedAvatars", Arrays.asList(selectedAvatar))
                 .append("createdAt", new Date());
 
         try {
@@ -62,6 +76,27 @@ public class PlayerDAO {
             return null;
         }
         return players.find(eq("username", username.trim())).first();
+    }
+
+    public boolean updateSelectedAvatar(String username, String avatarId) {
+        if (username == null || username.isBlank() || avatarId == null || avatarId.isBlank()) {
+            return false;
+        }
+
+        try {
+            Document user = players.find(eq("username", username.trim())).first();
+            if (user == null) {
+                return false;
+            }
+
+            players.updateOne(
+                    eq("username", username.trim()),
+                    new Document("$set", new Document("selectedAvatar", avatarId))
+            );
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private String hashPassword(String rawPassword) {

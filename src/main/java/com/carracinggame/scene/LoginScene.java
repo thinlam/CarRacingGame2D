@@ -25,17 +25,11 @@ public class LoginScene {
     private final Runnable onLoginSuccess;
     private final PlayerDAO playerDAO = new PlayerDAO();
 
-    private boolean registerMode = false;
-
     private TextField usernameField;
     private PasswordField passwordField;
-    private PasswordField confirmField;
 
-    private VBox confirmGroup;
     private Label messageLabel;
     private Button actionButton;
-    private Label helperLabel;
-    private Hyperlink switchLink;
     private Label forgotKeyLabel;
 
     public LoginScene(Stage stage, Runnable onLoginSuccess) {
@@ -101,14 +95,10 @@ public class LoginScene {
         card.setPrefWidth(320);
         card.setMaxWidth(320);
 
-        card.setMinHeight(Region.USE_PREF_SIZE);
-        card.setPrefHeight(Region.USE_COMPUTED_SIZE);
-        card.setMaxHeight(Region.USE_PREF_SIZE);
-
         Text titleWhite = new Text("RACE ");
         titleWhite.getStyleClass().add("title-white");
 
-        Text titleBlue = new Text("READY");
+        Text titleBlue = new Text("LOGIN");
         titleBlue.getStyleClass().add("title-blue");
 
         TextFlow titleFlow = new TextFlow(titleWhite, titleBlue);
@@ -138,16 +128,6 @@ public class LoginScene {
         passwordField.setPromptText("Password");
         HBox passwordBox = createInputShell("◈", passwordField);
 
-        Label confirmLabel = sectionLabel("CONFIRM ACCESS CODE");
-
-        confirmField = new PasswordField();
-        confirmField.setPromptText("Confirm password");
-        HBox confirmBox = createInputShell("◈", confirmField);
-
-        confirmGroup = new VBox(6, confirmLabel, confirmBox);
-        confirmGroup.setVisible(false);
-        confirmGroup.setManaged(false);
-
         CheckBox rememberBox = new CheckBox("STAY AUTHENTICATED");
         rememberBox.getStyleClass().add("remember-box");
 
@@ -158,7 +138,6 @@ public class LoginScene {
         messageLabel = new Label();
         messageLabel.getStyleClass().add("message-label");
         messageLabel.setWrapText(true);
-        messageLabel.setManaged(true);
 
         HBox divider = createDivider("EXTERNAL LINKUPS");
 
@@ -188,22 +167,24 @@ public class LoginScene {
         );
         footerRow.setAlignment(Pos.CENTER);
 
-        helperLabel = new Label("Chưa có tài khoản?");
+        Label helperLabel = new Label("Chưa có tài khoản?");
         helperLabel.getStyleClass().add("helper-label");
 
-        switchLink = new Hyperlink("Đăng ký");
+        Hyperlink switchLink = new Hyperlink("Đăng ký");
         switchLink.getStyleClass().add("switch-link");
         switchLink.setBorder(Border.EMPTY);
         switchLink.setPadding(Insets.EMPTY);
-        switchLink.setOnAction(e -> setMode(!registerMode));
+        switchLink.setOnAction(e ->
+                stage.setScene(RegisterScene.create(stage, () ->
+                        stage.setScene(LoginScene.create(stage, onLoginSuccess)), onLoginSuccess))
+        );
 
         HBox switchBox = new HBox(5, helperLabel, switchLink);
         switchBox.setAlignment(Pos.CENTER);
 
-        actionButton.setOnAction(e -> handleSubmit());
-        usernameField.setOnAction(e -> handleSubmit());
-        passwordField.setOnAction(e -> handleSubmit());
-        confirmField.setOnAction(e -> handleSubmit());
+        actionButton.setOnAction(e -> handleLogin());
+        usernameField.setOnAction(e -> handleLogin());
+        passwordField.setOnAction(e -> handleLogin());
 
         card.getChildren().addAll(
                 titleFlow,
@@ -213,7 +194,6 @@ public class LoginScene {
                 usernameBox,
                 passwordHeader,
                 passwordBox,
-                confirmGroup,
                 rememberBox,
                 spacer(2),
                 actionButton,
@@ -242,10 +222,9 @@ public class LoginScene {
         return scene;
     }
 
-    private void handleSubmit() {
+    private void handleLogin() {
         String username = usernameField.getText().trim();
         String password = passwordField.getText();
-        String confirm = confirmField.getText();
 
         if (username.isEmpty()) {
             showMessage("Vui lòng nhập username.", "#ff7b7b");
@@ -257,64 +236,14 @@ public class LoginScene {
             return;
         }
 
-        if (registerMode) {
-            if (username.length() < 3) {
-                showMessage("Username phải có ít nhất 3 ký tự.", "#ff7b7b");
-                return;
-            }
-
-            if (password.length() < 6) {
-                showMessage("Password phải có ít nhất 6 ký tự.", "#ff7b7b");
-                return;
-            }
-
-            if (!password.equals(confirm)) {
-                showMessage("Mật khẩu xác nhận không khớp.", "#ff7b7b");
-                return;
-            }
-
-            boolean created = playerDAO.registerAccount(username, password);
-            if (created) {
-                showMessage("Đăng ký thành công. Hãy đăng nhập để vào game.", "#57ff9a");
-                usernameField.clear();
-                passwordField.clear();
-                confirmField.clear();
-                setMode(false);
-            } else {
-                showMessage("Username đã tồn tại hoặc không thể tạo tài khoản.", "#ff7b7b");
-            }
+        boolean valid = playerDAO.validateLogin(username, password);
+        if (valid) {
+            UserSession.setUsername(username);
+            showMessage("Đăng nhập thành công!", "#57ff9a");
+            onLoginSuccess.run();
         } else {
-            boolean valid = playerDAO.validateLogin(username, password);
-            if (valid) {
-                UserSession.setUsername(username);
-                showMessage("Đăng nhập thành công!", "#57ff9a");
-                onLoginSuccess.run();
-            } else {
-                showMessage("Sai username hoặc password.", "#ff7b7b");
-            }
+            showMessage("Sai username hoặc password.", "#ff7b7b");
         }
-    }
-
-    private void setMode(boolean register) {
-        this.registerMode = register;
-        confirmGroup.setVisible(register);
-        confirmGroup.setManaged(register);
-
-        if (register) {
-            actionButton.setText("CREATE DRIVER");
-            helperLabel.setText("Đã có tài khoản?");
-            switchLink.setText("Đăng nhập");
-            forgotKeyLabel.setVisible(false);
-            forgotKeyLabel.setManaged(false);
-        } else {
-            actionButton.setText("⚡ START ENGINE");
-            helperLabel.setText("Chưa có tài khoản?");
-            switchLink.setText("Đăng ký");
-            forgotKeyLabel.setVisible(true);
-            forgotKeyLabel.setManaged(true);
-        }
-
-        messageLabel.setText("");
     }
 
     private HBox createInputShell(String iconText, TextInputControl field) {
