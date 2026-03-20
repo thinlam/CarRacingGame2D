@@ -19,19 +19,25 @@ public class MainApp extends Application {
 
             stage.setTitle("Car Racing Game 2D");
 
-            // Cố định kích thước cửa sổ
+            // Kích thước khởi tạo ban đầu
             stage.setWidth(APP_WIDTH);
             stage.setHeight(APP_HEIGHT);
-            stage.setMinWidth(APP_WIDTH);
-            stage.setMinHeight(APP_HEIGHT);
-            stage.setMaxWidth(APP_WIDTH);
-            stage.setMaxHeight(APP_HEIGHT);
-            stage.setResizable(false);
+
+            // Cho phép resize để dùng được nút -, ô vuông, X
+            stage.setResizable(true);
+
+            // Kích thước nhỏ nhất để layout không bể
+            stage.setMinWidth(1000);
+            stage.setMinHeight(650);
 
             stage.setScene(LoginScene.create(stage, () -> {
                 Game game = new Game(stage);
                 game.start();
             }));
+
+            // Mở ra ở trạng thái phóng to cửa sổ
+            // vẫn còn thanh tiêu đề, nút -, ô vuông, X
+            stage.setMaximized(true);
 
             stage.show();
 
