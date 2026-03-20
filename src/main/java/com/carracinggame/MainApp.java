@@ -1,78 +1,54 @@
 package com.carracinggame;
 
-import javafx.animation.AnimationTimer;
+import com.carracinggame.core.Game;
+import com.carracinggame.database.MongoDBConnection;
+import com.carracinggame.scene.LoginScene;
 import javafx.application.Application;
-import javafx.scene.Scene;
-import javafx.scene.canvas.Canvas;
-import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.input.KeyCode;
-import javafx.scene.layout.StackPane;
-import javafx.scene.paint.Color;
+import javafx.scene.control.Alert;
 import javafx.stage.Stage;
-
-import java.util.HashSet;
-import java.util.Set;
 
 public class MainApp extends Application {
 
-    private static final int WIDTH = 800;
-    private static final int HEIGHT = 600;
-
-    private double carX = 380;
-    private double carY = 450;
-    private double speed = 4;
-
-    private final Set<KeyCode> keysPressed = new HashSet<>();
+    public static final double APP_WIDTH = 1280;
+    public static final double APP_HEIGHT = 720;
 
     @Override
     public void start(Stage stage) {
-        Canvas canvas = new Canvas(WIDTH, HEIGHT);
-        GraphicsContext gc = canvas.getGraphicsContext2D();
+        try {
+            MongoDBConnection.init();
 
-        Scene scene = new Scene(new StackPane(canvas));
-        stage.setTitle("Car Racing Game 2D");
-        stage.setScene(scene);
-        stage.show();
+            stage.setTitle("Car Racing Game 2D");
 
-        scene.setOnKeyPressed(e -> keysPressed.add(e.getCode()));
-        scene.setOnKeyReleased(e -> keysPressed.remove(e.getCode()));
+            // Cố định kích thước cửa sổ
+            stage.setWidth(APP_WIDTH);
+            stage.setHeight(APP_HEIGHT);
+            stage.setMinWidth(APP_WIDTH);
+            stage.setMinHeight(APP_HEIGHT);
+            stage.setMaxWidth(APP_WIDTH);
+            stage.setMaxHeight(APP_HEIGHT);
+            stage.setResizable(false);
 
-        AnimationTimer gameLoop = new AnimationTimer() {
-            @Override
-            public void handle(long now) {
-                update();
-                render(gc);
-            }
-        };
-        gameLoop.start();
-    }
+            stage.setScene(LoginScene.create(stage, () -> {
+                Game game = new Game(stage);
+                game.start();
+            }));
 
-    private void update() {
-        if (keysPressed.contains(KeyCode.LEFT)) {
-            carX -= speed;
-        }
-        if (keysPressed.contains(KeyCode.RIGHT)) {
-            carX += speed;
-        }
-        if (keysPressed.contains(KeyCode.UP)) {
-            carY -= speed;
-        }
-        if (keysPressed.contains(KeyCode.DOWN)) {
-            carY += speed;
+            stage.show();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("MongoDB Atlas Error");
+            alert.setHeaderText("Không kết nối được MongoDB Atlas");
+            alert.setContentText(e.getMessage());
+            alert.showAndWait();
         }
     }
 
-    private void render(GraphicsContext gc) {
-        gc.setFill(Color.DARKGRAY);
-        gc.fillRect(0, 0, WIDTH, HEIGHT);
-
-        // Đường đua
-        gc.setFill(Color.GRAY);
-        gc.fillRect(200, 0, 400, HEIGHT);
-
-        // Xe
-        gc.setFill(Color.RED);
-        gc.fillRect(carX, carY, 40, 70);
+    @Override
+    public void stop() {
+        MongoDBConnection.close();
     }
 
     public static void main(String[] args) {
