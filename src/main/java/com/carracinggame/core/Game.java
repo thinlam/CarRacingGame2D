@@ -19,14 +19,9 @@ public class Game {
 
     private GameState state;
     private AppScene currentScene;
-
-    // Map đang chọn
     private MapId selectedMap = MapId.NORTH;
 
-    // Dữ liệu người chơi
     private final PlayerProfile playerProfile;
-
-    // Dịch vụ gara và shop
     private final GarageService garageService;
     private final ShopService shopService;
 
@@ -34,7 +29,6 @@ public class Game {
         this.stage = stage;
         this.stage.setTitle(GameConfig.GAME_TITLE);
 
-        // Khởi tạo dữ liệu mặc định
         this.playerProfile = new PlayerProfile("HuuHai", GameConfig.START_COINS, CarId.RED_RACER);
         this.garageService = new GarageService(playerProfile);
         this.shopService = new ShopService();
@@ -53,6 +47,10 @@ public class Game {
     }
 
     public void switchState(GameState newState) {
+        if (newState == null) {
+            return;
+        }
+
         if (currentScene != null) {
             currentScene.onHide();
         }
@@ -72,8 +70,6 @@ public class Game {
             case GARAGE -> new GarageScene(this);
             case SHOP -> new ShopScene(this);
             case RACE -> new RaceScene(this);
-
-            // Tạm thời chưa làm thì cho quay về menu
             case LOGIN, RESULT -> new MenuScene(this);
         };
     }
@@ -85,6 +81,10 @@ public class Game {
 
     public void goToMenu() {
         switchState(GameState.MENU);
+    }
+
+    public void goTo(GameState gameState) {
+        switchState(gameState);
     }
 
     public GameState getState() {
@@ -113,8 +113,5 @@ public class Game {
 
     public ShopService getShopService() {
         return shopService;
-    }
-
-    public void goTo(GameState gameState) {
     }
 }

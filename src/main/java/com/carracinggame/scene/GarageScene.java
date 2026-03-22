@@ -13,6 +13,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -24,16 +25,15 @@ public class GarageScene implements AppScene {
 
     private final Game game;
     private final GarageService garageService;
+    private final Scene scene;
+
     private Label messageLabel;
     private VBox listContainer;
 
     public GarageScene(Game game) {
         this.game = game;
         this.garageService = game.getGarageService();
-    }
 
-    @Override
-    public Scene createScene() {
         Label title = new Label("GARA XE");
         title.setFont(Font.font("Arial", FontWeight.EXTRA_BOLD, 32));
         title.setTextFill(Color.WHITE);
@@ -58,17 +58,19 @@ public class GarageScene implements AppScene {
         backButton.setTextFill(Color.WHITE);
         backButton.setStyle("-fx-background-color: #1f2937; -fx-background-radius: 14;");
 
+        HBox bottomBox = new HBox(backButton);
+        bottomBox.setAlignment(Pos.CENTER_LEFT);
+        bottomBox.setPadding(new Insets(0, 0, 20, 24));
+
         BorderPane root = new BorderPane();
+        root.setPrefSize(GameConfig.WIDTH, GameConfig.HEIGHT);
         root.setTop(topBox);
         root.setCenter(scrollPane);
-        root.setBottom(new HBox(backButton));
-        BorderPane.setAlignment(backButton, Pos.CENTER);
-        BorderPane.setMargin(backButton, new Insets(0, 0, 20, 24));
+        root.setBottom(bottomBox);
         root.setStyle("-fx-background-color: linear-gradient(to bottom, #111827, #0f172a 55%, #0f766e);");
 
+        this.scene = new Scene(root, GameConfig.WIDTH, GameConfig.HEIGHT);
         refresh();
-
-        return new Scene(root, GameConfig.WIDTH, GameConfig.HEIGHT);
     }
 
     private void refresh() {
@@ -106,7 +108,7 @@ public class GarageScene implements AppScene {
             });
 
             Region spacer = new Region();
-            HBox.setHgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
+            HBox.setHgrow(spacer, Priority.ALWAYS);
 
             HBox card = new HBox(18, preview, infoBox, spacer, actionButton);
             card.setAlignment(Pos.CENTER_LEFT);
@@ -119,6 +121,12 @@ public class GarageScene implements AppScene {
 
     @Override
     public Scene getScene() {
-        return null;
+        return scene;
+    }
+
+    @Override
+    public void onShow() {
+        refresh();
+        requestFocus();
     }
 }

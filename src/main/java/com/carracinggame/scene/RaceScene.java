@@ -7,6 +7,7 @@ import com.carracinggame.core.GameConfig;
 import com.carracinggame.core.GameLoop;
 import com.carracinggame.core.GameState;
 import com.carracinggame.input.InputHandler;
+import com.carracinggame.map.MapId;
 import com.carracinggame.physics.CollisionDetector;
 import com.carracinggame.render.GameRenderer;
 import javafx.scene.Scene;
@@ -31,7 +32,6 @@ public class RaceScene implements AppScene {
     private final GameRenderer renderer = new GameRenderer();
 
     private final PlayerCar player;
-
     private double scrollOffset = 0;
 
     public RaceScene(Game game) {
@@ -59,12 +59,14 @@ public class RaceScene implements AppScene {
         });
 
         Image carSprite = resolveCarSprite();
+        CarDefinition equippedCar = game.getGarageService().getEquippedCar();
         this.player = new PlayerCar(
                 GameConfig.PLAYER_START_X,
                 GameConfig.PLAYER_START_Y,
                 GameConfig.CAR_W,
                 GameConfig.CAR_H,
                 carSprite,
+                equippedCar,
                 input
         );
     }
@@ -97,10 +99,8 @@ public class RaceScene implements AppScene {
     }
 
     private void resetPlayer() {
-        player.setX(GameConfig.PLAYER_START_X);
-        player.setY(GameConfig.PLAYER_START_Y);
+        player.resetPosition();
         player.setAngleDeg(0);
-        player.setSpeed(0);
         scrollOffset = 0;
     }
 
@@ -117,16 +117,15 @@ public class RaceScene implements AppScene {
         loop = new GameLoop(new GameLoop.Tick() {
             @Override
             public void update(double deltaTime) {
-                player.update();
+                player.update(deltaTime);
                 collision.clampToTrack(player, GameConfig.TRACK_X, GameConfig.TRACK_W, GameConfig.HEIGHT);
-
-                scrollOffset += player.getSpeed();
+                scrollOffset += player.getCurrentSpeed() * deltaTime;
             }
 
             @Override
             public void render() {
                 renderer.clear(gc, GameConfig.WIDTH, GameConfig.HEIGHT);
-                renderer.drawBackground(gc, GameConfig.WIDTH, GameConfig.HEIGHT);
+                drawMapBackground();
                 renderer.drawTrack(gc, GameConfig.TRACK_X, GameConfig.TRACK_W, GameConfig.HEIGHT);
                 renderer.drawCar(gc, player);
                 drawHud();
@@ -146,19 +145,51 @@ public class RaceScene implements AppScene {
         input.clear();
     }
 
+    private void drawMapBackground() {
+        MapId selectedMap = game.getSelectedMap();
+
+        if (selectedMap == MapId.NORTH) {
+            gc.setFill(Color.web("#9fd7ff"));
+            gc.fillRect(0, 0, GameConfig.WIDTH, GameConfig.HEIGHT);
+            gc.setFill(Color.rgb(255, 255, 255, 0.25));
+            gc.fillOval(18, 70, 120, 80);
+            gc.fillOval(660, 340, 110, 70);
+        } else if (selectedMap == MapId.CENTRAL) {
+            gc.setFill(Color.web("#ffd7a6"));
+            gc.fillRect(0, 0, GameConfig.WIDTH, GameConfig.HEIGHT);
+            gc.setFill(Color.rgb(175, 100, 50, 0.28));
+            gc.fillRect(30, 260, 120, 150);
+            gc.fillOval(650, 80, 24, 34);
+            gc.fillOval(690, 120, 24, 34);
+        } else {
+            gc.setFill(Color.web("#9fe2c1"));
+            gc.fillRect(0, 0, GameConfig.WIDTH, GameConfig.HEIGHT);
+            gc.setFill(Color.rgb(0, 90, 110, 0.22));
+            gc.fillRect(0, 0, 170, GameConfig.HEIGHT);
+            gc.fillRect(630, 0, 170, GameConfig.HEIGHT);
+            gc.setFill(Color.rgb(120, 70, 30, 0.7));
+            gc.fillRoundRect(55, 420, 78, 24, 10, 10);
+            gc.fillRoundRect(670, 340, 86, 24, 10, 10);
+        }
+    }
+
     private void drawHud() {
-        renderer.drawHudBox(gc, 16, 16, 250, 92);
+        renderer.drawHudBox(gc, 16, 16, 320, 110);
 
         renderer.drawText(gc,
                 "Map: " + game.getSelectedMap(),
                 28, 40, 16, Color.WHITE);
 
         renderer.drawText(gc,
-                "Speed: " + String.format("%.2f", player.getSpeed()),
-                28, 62, 14, Color.WHITE);
+                "Speed: " + String.format("%.0f", player.getCurrentSpeed()),
+                28, 64, 14, Color.WHITE);
+
+        renderer.drawText(gc,
+                "Xe: " + game.getGarageService().getEquippedCar().getName(),
+                28, 86, 14, Color.WHITE);
 
         renderer.drawText(gc,
                 "ESC: Menu | R: Reset",
-                28, 84, 13, Color.WHITE);
+                28, 108, 13, Color.WHITE);
     }
 }
