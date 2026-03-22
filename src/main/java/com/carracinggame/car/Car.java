@@ -5,6 +5,7 @@ import javafx.scene.image.Image;
 
 public class Car {
 
+
     protected double x;
     protected double y;
     protected double w;
