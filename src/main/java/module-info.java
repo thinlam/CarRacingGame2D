@@ -11,5 +11,7 @@ module com.carracinggame {
 
     exports com.carracinggame;
     exports com.carracinggame.scene;
+    exports com.carracinggame.shop;
+    opens com.carracinggame.shop to javafx.fxml;
     exports com.carracinggame.database;
 }

@@ -24,6 +24,10 @@ public class MenuScene implements AppScene {
     private final Game game;
     private final Scene scene;
 
+    private Label coinValue;
+    private Label playerNameValue;
+    private Label equippedCarValue;
+    private Label selectedMapValue;
     private final PlayerDAO playerDAO = new PlayerDAO();
 
     private String playerName = "Player";
@@ -48,6 +52,7 @@ public class MenuScene implements AppScene {
         topBar.setPadding(new Insets(14, 14, 10, 14));
         topBar.setAlignment(Pos.CENTER_LEFT);
 
+        Node profileCard = buildProfileCard();
         Node profileCard = buildProfileCard(playerName);
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -75,17 +80,26 @@ public class MenuScene implements AppScene {
 
         VBox character = new VBox(10);
         character.setAlignment(Pos.CENTER);
+
         Circle head = new Circle(44, Color.rgb(255, 235, 200));
         head.setStroke(Color.rgb(0, 0, 0, 0.15));
+
         Rectangle body = new Rectangle(130, 190);
         body.setArcWidth(26);
         body.setArcHeight(26);
         body.setFill(Color.rgb(255, 220, 80));
         body.setStroke(Color.rgb(0, 0, 0, 0.12));
-        Label hint = new Label("Nhân vật (placeholder)");
-        hint.setStyle("-fx-font-size: 12px; -fx-text-fill: #0d2b4f; -fx-font-weight: 700;");
-        character.getChildren().addAll(head, body, hint);
 
+        Label hint = new Label("Nhân vật / xe hiện tại (placeholder)");
+        hint.setStyle("-fx-font-size: 12px; -fx-text-fill: #0d2b4f; -fx-font-weight: 700;");
+
+        equippedCarValue = new Label();
+        equippedCarValue.setStyle("-fx-font-size: 13px; -fx-text-fill: #0d2b4f; -fx-font-weight: 900;");
+
+        selectedMapValue = new Label();
+        selectedMapValue.setStyle("-fx-font-size: 12px; -fx-text-fill: #204a73; -fx-font-weight: 800;");
+
+        character.getChildren().addAll(head, body, hint, equippedCarValue, selectedMapValue);
         character.setTranslateX(80);
         character.setTranslateY(20);
 
@@ -93,11 +107,23 @@ public class MenuScene implements AppScene {
         root.setCenter(center);
 
         VBox actions = new VBox(12);
-        actions.setPadding(new Insets(110, 16, 16, 16));
+        actions.setPadding(new Insets(90, 16, 16, 16));
         actions.setAlignment(Pos.TOP_RIGHT);
 
         Button btnStart = bigAction("🏁  Start Race", "#35c88b");
         Button btnShop = bigAction("🛒  Shop", "#3aa0ff");
+        Button btnGarage = bigAction("🚗  Garage", "#ff8c42");
+        Button btnBonus = bigAction("🪙  +500 Coin", "#a35dff");
+
+        btnStart.setOnAction(e -> game.switchState(GameState.MAP_SELECT));
+        btnShop.setOnAction(e -> game.switchState(GameState.SHOP));
+        btnGarage.setOnAction(e -> game.switchState(GameState.GARAGE));
+        btnBonus.setOnAction(e -> {
+            game.getPlayerProfile().addCoins(500);
+            refreshData();
+        });
+
+        actions.getChildren().addAll(btnStart, btnShop, btnGarage, btnBonus);
         Button btnProfile = bigAction("👤  Profile", "#a35dff");
         Button btnLogout = bigAction("⎋  Đăng xuất", "#ff6b6b");
 
@@ -120,12 +146,18 @@ public class MenuScene implements AppScene {
         Button home = navBtn("🏠 Home");
         Button shop = navBtn("🛒 Shop");
         Button garage = navBtn("🚗 Garage");
+        Button map = navBtn("🗺 Map");
 
+        home.setOnAction(e -> {
+        });
+        shop.setOnAction(e -> game.switchState(GameState.SHOP));
+        garage.setOnAction(e -> game.switchState(GameState.GARAGE));
+        map.setOnAction(e -> game.switchState(GameState.MAP_SELECT));
         home.setOnAction(e -> {});
         shop.setOnAction(e -> game.switchState(GameState.SHOP));
         garage.setOnAction(e -> game.switchState(GameState.GARAGE));
 
-        bottom.getChildren().addAll(home, shop, garage);
+        bottom.getChildren().addAll(home, shop, garage, map);
         root.setBottom(bottom);
 
         this.scene = new Scene(root, GameConfig.WIDTH, GameConfig.HEIGHT);
@@ -138,6 +170,7 @@ public class MenuScene implements AppScene {
 
     @Override
     public void onShow() {
+        refreshData();
         loadPlayerData();
         refreshCoins();
         refreshPlayerName();
@@ -145,8 +178,10 @@ public class MenuScene implements AppScene {
     }
 
     @Override
-    public void onHide() {}
+    public void onHide() {
+    }
 
+    private Node buildProfileCard() {
     private void loadPlayerData() {
         String username = UserSession.getUsername();
 
@@ -187,6 +222,14 @@ public class MenuScene implements AppScene {
         avatar.setStroke(Color.rgb(255, 255, 255, 0.7));
 
         VBox info = new VBox(2);
+
+        playerNameValue = new Label();
+        playerNameValue.setStyle("-fx-font-size: 15px; -fx-font-weight: 900; -fx-text-fill: #0d2b4f;");
+
+        Label sub = new Label("Menu chính - Hữu Hải");
+        sub.setStyle("-fx-font-size: 12px; -fx-text-fill: #204a73;");
+
+        info.getChildren().addAll(playerNameValue, sub);
         playerNameLabel = new Label(name);
         playerNameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: 900; -fx-text-fill: #0d2b4f;");
 
@@ -195,6 +238,7 @@ public class MenuScene implements AppScene {
 
         info.getChildren().addAll(playerNameLabel, sub);
         card.getChildren().addAll(avatar, info);
+
         return card;
     }
 
@@ -219,6 +263,7 @@ public class MenuScene implements AppScene {
 
         Label icon = new Label("🪙");
         icon.setStyle("-fx-font-size: 14px;");
+
         Label label = new Label("Coin:");
         label.setStyle("-fx-font-size: 12px; -fx-text-fill: #0d2b4f; -fx-font-weight: 800;");
 
@@ -227,6 +272,7 @@ public class MenuScene implements AppScene {
 
         coinPill.getChildren().addAll(icon, label, coinValue);
         bar.getChildren().addAll(coinPill);
+
         return bar;
     }
 
@@ -256,6 +302,30 @@ public class MenuScene implements AppScene {
         return b;
     }
 
+    private void refreshData() {
+        if (coinValue != null) {
+            coinValue.setText(String.valueOf(game.getPlayerProfile().getCoins()));
+        }
+
+        if (playerNameValue != null) {
+            playerNameValue.setText(game.getPlayerProfile().getPlayerName());
+        }
+
+        if (equippedCarValue != null) {
+            equippedCarValue.setText("Xe hiện tại: " + game.getGarageService().getEquippedCar().getName());
+        }
+
+        if (selectedMapValue != null) {
+            selectedMapValue.setText("Map hiện tại: " + toDisplayName());
+        }
+    }
+
+    private String toDisplayName() {
+        return switch (game.getSelectedMap()) {
+            case NORTH -> "Miền Bắc";
+            case CENTRAL -> "Miền Trung";
+            case SOUTH -> "Miền Nam";
+        };
     private void refreshCoins() {
         if (coinValue != null) {
             coinValue.setText(String.valueOf(coins));
@@ -289,6 +359,7 @@ public class MenuScene implements AppScene {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Thông báo");
         alert.setHeaderText(null);
+        alert.setContentText(feature + " sẽ được cập nhật thêm.");
         alert.setContentText(feature);
         alert.showAndWait();
     }

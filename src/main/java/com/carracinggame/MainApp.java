@@ -4,17 +4,34 @@ import com.carracinggame.core.Game;
 import com.carracinggame.database.MongoDBConnection;
 import com.carracinggame.scene.LoginScene;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import javafx.stage.Stage;
 
 public class MainApp extends Application {
 
+    private Game game;
     public static final double APP_WIDTH = 1280;
     public static final double APP_HEIGHT = 720;
 
     @Override
     public void start(Stage stage) {
         try {
+            stage.setTitle("Car Racing 2D - Shop & Garage");
+            stage.setMinWidth(1100);
+            stage.setMinHeight(720);
+            stage.centerOnScreen();
+
+            stage.setOnCloseRequest(event -> {
+                Platform.exit();
+                System.exit(0);
+            });
+
+            game = new Game(stage);
+            game.start();
+
+        } catch (Exception e) {
+            e.printStackTrace();
             MongoDBConnection.init();
 
             stage.setTitle("Car Racing Game 2D");
@@ -54,6 +71,7 @@ public class MainApp extends Application {
 
     @Override
     public void stop() {
+        System.out.println("Game closed.");
         MongoDBConnection.close();
     }
 
