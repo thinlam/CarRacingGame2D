@@ -3,6 +3,8 @@ package com.carracinggame.scene;
 import com.carracinggame.core.Game;
 import com.carracinggame.core.GameConfig;
 import com.carracinggame.core.GameState;
+import com.carracinggame.core.UserSession;
+import com.carracinggame.database.PlayerDAO;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -14,6 +16,8 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
+import javafx.stage.Stage;
+import org.bson.Document;
 
 public class MenuScene implements AppScene {
 
@@ -24,9 +28,18 @@ public class MenuScene implements AppScene {
     private Label playerNameValue;
     private Label equippedCarValue;
     private Label selectedMapValue;
+    private final PlayerDAO playerDAO = new PlayerDAO();
+
+    private String playerName = "Player";
+    private int coins = 0;
+
+    private Label coinValue;
+    private Label playerNameLabel;
 
     public MenuScene(Game game) {
         this.game = game;
+
+        loadPlayerData();
 
         BorderPane root = new BorderPane();
         root.setPrefSize(GameConfig.WIDTH, GameConfig.HEIGHT);
@@ -40,6 +53,7 @@ public class MenuScene implements AppScene {
         topBar.setAlignment(Pos.CENTER_LEFT);
 
         Node profileCard = buildProfileCard();
+        Node profileCard = buildProfileCard(playerName);
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         Node coinBar = buildCoinBar();
@@ -110,6 +124,15 @@ public class MenuScene implements AppScene {
         });
 
         actions.getChildren().addAll(btnStart, btnShop, btnGarage, btnBonus);
+        Button btnProfile = bigAction("👤  Profile", "#a35dff");
+        Button btnLogout = bigAction("⎋  Đăng xuất", "#ff6b6b");
+
+        btnStart.setOnAction(e -> game.switchState(GameState.MAP_SELECT));
+        btnShop.setOnAction(e -> game.switchState(GameState.SHOP));
+        btnProfile.setOnAction(e -> comingSoon("Profile"));
+        btnLogout.setOnAction(e -> logout());
+
+        actions.getChildren().addAll(btnStart, btnShop, btnProfile, btnLogout);
         root.setRight(actions);
 
         HBox bottom = new HBox(10);
@@ -130,6 +153,9 @@ public class MenuScene implements AppScene {
         shop.setOnAction(e -> game.switchState(GameState.SHOP));
         garage.setOnAction(e -> game.switchState(GameState.GARAGE));
         map.setOnAction(e -> game.switchState(GameState.MAP_SELECT));
+        home.setOnAction(e -> {});
+        shop.setOnAction(e -> game.switchState(GameState.SHOP));
+        garage.setOnAction(e -> game.switchState(GameState.GARAGE));
 
         bottom.getChildren().addAll(home, shop, garage, map);
         root.setBottom(bottom);
@@ -145,6 +171,9 @@ public class MenuScene implements AppScene {
     @Override
     public void onShow() {
         refreshData();
+        loadPlayerData();
+        refreshCoins();
+        refreshPlayerName();
         scene.getRoot().requestFocus();
     }
 
@@ -153,6 +182,32 @@ public class MenuScene implements AppScene {
     }
 
     private Node buildProfileCard() {
+    private void loadPlayerData() {
+        String username = UserSession.getUsername();
+
+        if (username == null || username.isBlank()) {
+            playerName = "Guest";
+            coins = 0;
+            return;
+        }
+
+        Document player = playerDAO.getPlayerByUsername(username);
+        if (player != null) {
+            playerName = player.getString("username");
+
+            Object coinsObj = player.get("coins");
+            if (coinsObj instanceof Number number) {
+                coins = number.intValue();
+            } else {
+                coins = 0;
+            }
+        } else {
+            playerName = username;
+            coins = 0;
+        }
+    }
+
+    private Node buildProfileCard(String name) {
         HBox card = new HBox(10);
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(10, 12, 10, 12));
@@ -175,6 +230,13 @@ public class MenuScene implements AppScene {
         sub.setStyle("-fx-font-size: 12px; -fx-text-fill: #204a73;");
 
         info.getChildren().addAll(playerNameValue, sub);
+        playerNameLabel = new Label(name);
+        playerNameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: 900; -fx-text-fill: #0d2b4f;");
+
+        Label sub = new Label("Profile");
+        sub.setStyle("-fx-font-size: 12px; -fx-text-fill: #204a73;");
+
+        info.getChildren().addAll(playerNameLabel, sub);
         card.getChildren().addAll(avatar, info);
 
         return card;
@@ -264,13 +326,41 @@ public class MenuScene implements AppScene {
             case CENTRAL -> "Miền Trung";
             case SOUTH -> "Miền Nam";
         };
+    private void refreshCoins() {
+        if (coinValue != null) {
+            coinValue.setText(String.valueOf(coins));
+        }
+    }
+
+    private void refreshPlayerName() {
+        if (playerNameLabel != null) {
+            playerNameLabel.setText(playerName);
+        }
+    }
+
+    private void logout() {
+        try {
+            UserSession.clear();
+
+            Stage stage = (Stage) scene.getWindow();
+            if (stage != null) {
+                stage.setScene(LoginScene.create(stage, () -> {
+                    Game newGame = new Game(stage);
+                    newGame.start();
+                }));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            comingSoon("Đăng xuất lỗi: " + e.getMessage());
+        }
     }
 
     private void comingSoon(String feature) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Coming soon");
+        alert.setTitle("Thông báo");
         alert.setHeaderText(null);
         alert.setContentText(feature + " sẽ được cập nhật thêm.");
+        alert.setContentText(feature);
         alert.showAndWait();
     }
 }
