@@ -7,56 +7,93 @@ import javafx.scene.input.KeyCode;
 public class PlayerCar extends Car {
 
     private final InputHandler input;
+    private final Image straightSprite;
+    private final Image leftSprite;
+    private final Image rightSprite;
+    private final Image crashSprite;
 
-    private final double accel = 0.18;
-    private final double brake = 0.30;
+    private final double accel = 0.12;
+    private final double brake = 0.20;
     private final double friction = 0.06;
-    private final double maxSpeed = 6.5;
-    private final double reverseMax = 2.8;     // tốc độ lùi tối đa
-    private final double turnSpeedDeg = 3.2;
+    private final double maxSpeed;
+    private final double moveStep;
 
-    public PlayerCar(double x, double y, double w, double h, Image sprite, InputHandler input) {
-        super(x, y, w, h, sprite);
+    private boolean crashed;
+
+    public PlayerCar(
+            double x,
+            double y,
+            double w,
+            double h,
+            Image straightSprite,
+            Image leftSprite,
+            Image rightSprite,
+            Image crashSprite,
+            InputHandler input,
+            double maxSpeed,
+            double moveStep
+    ) {
+        super(x, y, w, h, straightSprite);
         this.input = input;
-
-        this.angleDeg = 0; // ảnh của bạn đầu xe hướng lên -> 0° là chuẩn
-        this.speed = 0;
+        this.straightSprite = straightSprite;
+        this.leftSprite = leftSprite;
+        this.rightSprite = rightSprite;
+        this.crashSprite = crashSprite;
+        this.maxSpeed = maxSpeed;
+        this.moveStep = moveStep;
     }
 
     public void update() {
-        // xoay (thường chỉ cho xoay khi xe đang chạy để "thật" hơn)
-        if (Math.abs(speed) > 0.05) {
-            if (input.isDown(KeyCode.LEFT))  angleDeg -= turnSpeedDeg;
-            if (input.isDown(KeyCode.RIGHT)) angleDeg += turnSpeedDeg;
+        if (crashed) {
+            speed = Math.max(0, speed - 0.25);
+            sprite = crashSprite;
+            angleDeg = 18;
+            return;
         }
 
-        boolean up = input.isDown(KeyCode.UP);
-        boolean down = input.isDown(KeyCode.DOWN);
+        boolean left = input.isDown(KeyCode.LEFT) || input.isDown(KeyCode.A);
+        boolean right = input.isDown(KeyCode.RIGHT) || input.isDown(KeyCode.D);
+        boolean up = input.isDown(KeyCode.UP) || input.isDown(KeyCode.W);
+        boolean down = input.isDown(KeyCode.DOWN) || input.isDown(KeyCode.S);
 
-        // UP: tăng tốc tiến
-        if (up && !down) {
-            speed += accel;
-
-            // DOWN: phanh trước, chỉ lùi khi đã dừng/đang lùi
-        } else if (down && !up) {
-            if (speed > 0) {
-                speed = Math.max(0, speed - brake); // phanh về 0
-            } else {
-                speed = Math.max(-reverseMax, speed - accel); // lùi chậm
-            }
-
-            // không bấm gì: ma sát
+        if (left && !right) {
+            x -= moveStep;
+            angleDeg = -8;
+            sprite = leftSprite;
+        } else if (right && !left) {
+            x += moveStep;
+            angleDeg = 8;
+            sprite = rightSprite;
         } else {
-            if (speed > 0) speed = Math.max(0, speed - friction);
-            if (speed < 0) speed = Math.min(0, speed + friction);
+            angleDeg = 0;
+            sprite = straightSprite;
         }
 
-        // clamp tốc độ tiến
-        if (speed > maxSpeed) speed = maxSpeed;
+        if (up && !down) {
+            speed = Math.min(maxSpeed, speed + accel);
+        } else if (down && !up) {
+            speed = Math.max(1.5, speed - brake);
+        } else {
+            speed = Math.max(2.0, speed - friction);
+        }
+    }
 
-        // di chuyển theo góc (0° = lên)
-        double rad = Math.toRadians(angleDeg);
-        x += Math.sin(rad) * speed;
-        y -= Math.cos(rad) * speed;
+    public void reset(double x, double y) {
+        this.x = x;
+        this.y = y;
+        this.speed = 2.4;
+        this.angleDeg = 0;
+        this.crashed = false;
+        this.sprite = straightSprite;
+    }
+
+    public void crash() {
+        crashed = true;
+        sprite = crashSprite;
+        angleDeg = 18;
+    }
+
+    public boolean isCrashed() {
+        return crashed;
     }
 }
