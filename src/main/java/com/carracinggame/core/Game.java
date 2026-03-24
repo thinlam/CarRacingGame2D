@@ -1,6 +1,7 @@
 package com.carracinggame.core;
 
 import com.carracinggame.car.CarId;
+import com.carracinggame.database.PlayerDAO;
 import com.carracinggame.garage.GarageService;
 import com.carracinggame.map.MapId;
 import com.carracinggame.player.PlayerProfile;
@@ -29,8 +30,23 @@ public class Game {
         this.stage = stage;
         this.stage.setTitle(GameConfig.GAME_TITLE);
 
-        this.playerProfile = new PlayerProfile("HuuHai", GameConfig.START_COINS, CarId.RED_RACER);
+        PlayerDAO playerDAO = new PlayerDAO();
+        String username = UserSession.getUsername();
+
+        PlayerDAO.PlayerGameData savedData = playerDAO.loadGameData(username);
+
+        this.playerProfile = new PlayerProfile(
+                savedData.getUsername(),
+                savedData.getCoins(),
+                savedData.getEquippedCarId() == null ? CarId.RED_RACER : savedData.getEquippedCarId()
+        );
+
         this.garageService = new GarageService(playerProfile);
+        this.garageService.loadOwnedCars(
+                savedData.getOwnedCarIds(),
+                savedData.getEquippedCarId()
+        );
+
         this.shopService = new ShopService();
     }
 
@@ -85,6 +101,21 @@ public class Game {
 
     public void goTo(GameState gameState) {
         switchState(gameState);
+    }
+
+    public void saveProgress() {
+        String username = UserSession.getUsername();
+        if (username == null || username.isBlank()) {
+            return;
+        }
+
+        PlayerDAO playerDAO = new PlayerDAO();
+        playerDAO.savePlayerProgress(
+                username,
+                playerProfile.getCoins(),
+                garageService.getOwnedCarIds(),
+                playerProfile.getEquippedCarId()
+        );
     }
 
     public GameState getState() {

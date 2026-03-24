@@ -17,14 +17,46 @@ public class GarageService {
 
     public GarageService(PlayerProfile playerProfile) {
         this.playerProfile = playerProfile;
-        ownedCars.put(CarId.RED_RACER, new OwnedCar(CarId.RED_RACER, true));
+
+        CarId initialEquipped = playerProfile.getEquippedCarId() == null
+                ? CarId.RED_RACER
+                : playerProfile.getEquippedCarId();
+
+        ownedCars.put(CarId.RED_RACER, new OwnedCar(CarId.RED_RACER, false));
+        ownedCars.putIfAbsent(initialEquipped, new OwnedCar(initialEquipped, false));
+
+        equipCar(initialEquipped);
+    }
+
+    public void loadOwnedCars(List<CarId> savedOwnedCars, CarId equippedCarId) {
+        ownedCars.clear();
+
+        ownedCars.put(CarId.RED_RACER, new OwnedCar(CarId.RED_RACER, false));
+
+        if (savedOwnedCars != null) {
+            for (CarId carId : savedOwnedCars) {
+                if (carId != null) {
+                    ownedCars.putIfAbsent(carId, new OwnedCar(carId, false));
+                }
+            }
+        }
+
+        CarId safeEquipped = equippedCarId;
+        if (safeEquipped == null || !ownedCars.containsKey(safeEquipped)) {
+            safeEquipped = CarId.RED_RACER;
+        }
+
+        equipCar(safeEquipped);
     }
 
     public boolean ownsCar(CarId carId) {
-        return ownedCars.containsKey(carId);
+        return carId != null && ownedCars.containsKey(carId);
     }
 
     public void unlockCar(CarId carId) {
+        if (carId == null) {
+            return;
+        }
         ownedCars.putIfAbsent(carId, new OwnedCar(carId, false));
     }
 
@@ -33,26 +65,49 @@ public class GarageService {
             return false;
         }
 
-        ownedCars.values().forEach(ownedCar -> ownedCar.setEquipped(false));
+        for (OwnedCar ownedCar : ownedCars.values()) {
+            ownedCar.setEquipped(false);
+        }
+
         OwnedCar selected = ownedCars.get(carId);
-        selected.setEquipped(true);
+        if (selected != null) {
+            selected.setEquipped(true);
+        }
+
         playerProfile.setEquippedCarId(carId);
         return true;
     }
 
     public CarDefinition getEquippedCar() {
-        return ShopCatalog.getCar(playerProfile.getEquippedCarId());
+        CarId equippedId = playerProfile.getEquippedCarId();
+        if (equippedId == null) {
+            equippedId = CarId.RED_RACER;
+        }
+
+        CarDefinition car = ShopCatalog.getCar(equippedId);
+        return car != null ? car : ShopCatalog.getCar(CarId.RED_RACER);
     }
 
     public List<CarDefinition> getOwnedCarDefinitions() {
         List<CarDefinition> result = new ArrayList<>();
         for (OwnedCar ownedCar : ownedCars.values()) {
-            result.add(ShopCatalog.getCar(ownedCar.getCarId()));
+            CarDefinition car = ShopCatalog.getCar(ownedCar.getCarId());
+            if (car != null) {
+                result.add(car);
+            }
         }
         return result;
     }
 
     public List<OwnedCar> getOwnedCars() {
         return new ArrayList<>(ownedCars.values());
+    }
+
+    public List<CarId> getOwnedCarIds() {
+        List<CarId> result = new ArrayList<>();
+        for (OwnedCar ownedCar : ownedCars.values()) {
+            result.add(ownedCar.getCarId());
+        }
+        return result;
     }
 }
