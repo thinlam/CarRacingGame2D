@@ -24,7 +24,9 @@ public final class CarViewFactory {
     }
 
     public static Node createRaceCar(CarId carId) {
-        return buildTopViewCar(carId);
+        Group car = buildTopViewCar(carId);
+        car.setRotate(180); // đầu xe hướng lên trên khi đua
+        return car;
     }
 
     private static Node createPreview(CarId carId,
@@ -64,7 +66,7 @@ public final class CarViewFactory {
         Color bodyColor = getBodyColor(carId);
         Color centerColor = getCenterColor(carId);
         Color wingColor = bodyColor.darker();
-        Color tireColor = Color.web("#3b3b45");
+        Color tireColor = Color.web("#2f3138");
         Color whiteColor = Color.web("#f8fafc");
         Color noseLight = Color.web("#fde68a");
 
@@ -109,6 +111,10 @@ public final class CarViewFactory {
     }
 
     private static Color getBodyColor(CarId carId) {
+        if (carId == null) {
+            return Color.web("#9ca3af");
+        }
+
         return switch (carId) {
             case RED_RACER -> Color.web("#ef4444");
             case BLUE_STORM -> Color.web("#2563eb");
@@ -118,6 +124,10 @@ public final class CarViewFactory {
     }
 
     private static Color getCenterColor(CarId carId) {
+        if (carId == null) {
+            return Color.web("#e5e7eb");
+        }
+
         return switch (carId) {
             case RED_RACER -> Color.web("#facc15");
             case BLUE_STORM -> Color.web("#93c5fd");

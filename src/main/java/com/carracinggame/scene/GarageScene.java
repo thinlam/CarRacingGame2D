@@ -108,6 +108,7 @@ public class GarageScene implements AppScene {
 
             actionButton.setOnAction(event -> {
                 garageService.equipCar(car.getId());
+                game.saveProgress();
                 messageLabel.setText("Đã chọn " + car.getName() + " làm xe hiện tại.");
                 refresh();
             });

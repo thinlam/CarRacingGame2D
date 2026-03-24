@@ -12,9 +12,10 @@ import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
@@ -23,6 +24,8 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
+
+import java.io.InputStream;
 
 public class MenuScene implements AppScene {
 
@@ -34,7 +37,6 @@ public class MenuScene implements AppScene {
     private final Label equippedCarValue;
     private final Label selectedMapValue;
 
-    private final StackPane showroomHolder;
     private final StackPane carHolder;
     private final StackPane characterHolder;
 
@@ -46,7 +48,6 @@ public class MenuScene implements AppScene {
         this.equippedCarValue = new Label();
         this.selectedMapValue = new Label();
 
-        this.showroomHolder = new StackPane();
         this.carHolder = new StackPane();
         this.characterHolder = new StackPane();
 
@@ -54,9 +55,9 @@ public class MenuScene implements AppScene {
         root.setPrefSize(GameConfig.WIDTH, GameConfig.HEIGHT);
         root.setStyle("""
             -fx-background-color:
-                radial-gradient(center 18% 10%, radius 38%, rgba(255,255,255,0.30), transparent 60%),
-                radial-gradient(center 85% 16%, radius 30%, rgba(255,255,255,0.16), transparent 60%),
-                linear-gradient(to bottom, #8fd2ff 0%, #bfe6ff 42%, #dff3ff 100%);
+                radial-gradient(center 18% 10%, radius 36%, rgba(255,255,255,0.30), transparent 60%),
+                radial-gradient(center 84% 12%, radius 28%, rgba(255,255,255,0.14), transparent 60%),
+                linear-gradient(to bottom, #8fcfff 0%, #b9e4ff 46%, #dff3ff 100%);
         """);
 
         root.setTop(buildTopBar());
@@ -98,20 +99,20 @@ public class MenuScene implements AppScene {
     private Node buildProfileCard() {
         HBox card = new HBox(14);
         card.setAlignment(Pos.CENTER_LEFT);
-        card.setPadding(new Insets(14, 18, 14, 18));
+        card.setPadding(new Insets(16, 18, 16, 18));
         card.setStyle("""
-            -fx-background-color: rgba(255,255,255,0.50);
-            -fx-background-radius: 24;
-            -fx-border-color: rgba(255,255,255,0.72);
-            -fx-border-radius: 24;
+            -fx-background-color: rgba(255,255,255,0.52);
+            -fx-background-radius: 26;
+            -fx-border-color: rgba(255,255,255,0.76);
+            -fx-border-radius: 26;
         """);
 
-        Circle avatar = new Circle(31, Color.web("#5b7cf0"));
+        Circle avatar = new Circle(34, Color.web("#5b7cf0"));
 
         VBox info = new VBox(4);
 
         playerNameValue.setStyle("""
-            -fx-font-size: 16px;
+            -fx-font-size: 17px;
             -fx-font-weight: 900;
             -fx-text-fill: #0d2b4f;
         """);
@@ -119,7 +120,7 @@ public class MenuScene implements AppScene {
         Label sub = new Label("Menu chính");
         sub.setStyle("""
             -fx-font-size: 12px;
-            -fx-text-fill: #204a73;
+            -fx-text-fill: #28517c;
         """);
 
         info.getChildren().addAll(playerNameValue, sub);
@@ -131,17 +132,17 @@ public class MenuScene implements AppScene {
     private Node buildCoinBar() {
         HBox shell = new HBox();
         shell.setAlignment(Pos.CENTER_RIGHT);
-        shell.setPadding(new Insets(10, 12, 10, 12));
+        shell.setPadding(new Insets(12, 14, 12, 14));
         shell.setStyle("""
-            -fx-background-color: rgba(255,255,255,0.50);
-            -fx-background-radius: 24;
-            -fx-border-color: rgba(255,255,255,0.72);
-            -fx-border-radius: 24;
+            -fx-background-color: rgba(255,255,255,0.52);
+            -fx-background-radius: 26;
+            -fx-border-color: rgba(255,255,255,0.76);
+            -fx-border-radius: 26;
         """);
 
         HBox coinPill = new HBox(8);
         coinPill.setAlignment(Pos.CENTER_LEFT);
-        coinPill.setPadding(new Insets(10, 16, 10, 16));
+        coinPill.setPadding(new Insets(12, 16, 12, 16));
         coinPill.setStyle("""
             -fx-background-color: rgba(0,0,0,0.08);
             -fx-background-radius: 18;
@@ -171,29 +172,50 @@ public class MenuScene implements AppScene {
 
     private Node buildCenterArea() {
         StackPane center = new StackPane();
-        center.setPadding(new Insets(12, 28, 18, 28));
+        center.setPadding(new Insets(8, 26, 18, 26));
 
-        Rectangle panel = new Rectangle(GameConfig.WIDTH * 0.70, GameConfig.HEIGHT * 0.60);
-        panel.setArcWidth(42);
-        panel.setArcHeight(42);
-        panel.setFill(Color.rgb(255, 255, 255, 0.24));
-        panel.setStroke(Color.rgb(255, 255, 255, 0.36));
+        VBox showroomCard = new VBox(18);
+        showroomCard.setAlignment(Pos.TOP_CENTER);
+        showroomCard.setPadding(new Insets(20, 22, 20, 22));
+        showroomCard.setMaxWidth(920);
+        showroomCard.setStyle("""
+            -fx-background-color: rgba(255,255,255,0.28);
+            -fx-background-radius: 34;
+            -fx-border-color: rgba(255,255,255,0.36);
+            -fx-border-radius: 34;
+        """);
 
-        showroomHolder.setPrefSize(860, 470);
-        showroomHolder.setMinSize(860, 470);
-        showroomHolder.setMaxSize(860, 470);
+        Label title = new Label("SHOWROOM");
+        title.setStyle("""
+            -fx-font-size: 28px;
+            -fx-font-weight: 900;
+            -fx-text-fill: #123a63;
+        """);
 
-        Pane showroom = buildShowroomStage();
+        Label subtitle = new Label("Xe đang chọn trong Garage sẽ hiển thị tại đây");
+        subtitle.setStyle("""
+            -fx-font-size: 13px;
+            -fx-font-weight: 700;
+            -fx-text-fill: #3c6794;
+        """);
+
+        HBox displayRow = new HBox(22);
+        displayRow.setAlignment(Pos.CENTER);
+
+        VBox carBox = buildDisplayBox("XE ĐUA", carHolder, 320, 290);
+        VBox racerBox = buildDisplayBox("RACER", characterHolder, 300, 290);
+
+        displayRow.getChildren().addAll(carBox, racerBox);
 
         VBox infoBox = new VBox(10, equippedCarValue, selectedMapValue);
         infoBox.setAlignment(Pos.CENTER);
-        infoBox.setPadding(new Insets(14, 18, 14, 18));
-        infoBox.setMaxWidth(430);
+        infoBox.setPadding(new Insets(16, 18, 16, 18));
+        infoBox.setMaxWidth(460);
         infoBox.setStyle("""
-            -fx-background-color: rgba(255,255,255,0.42);
-            -fx-background-radius: 22;
-            -fx-border-color: rgba(255,255,255,0.40);
-            -fx-border-radius: 22;
+            -fx-background-color: rgba(255,255,255,0.45);
+            -fx-background-radius: 24;
+            -fx-border-color: rgba(255,255,255,0.42);
+            -fx-border-radius: 24;
         """);
 
         equippedCarValue.setStyle("""
@@ -205,129 +227,63 @@ public class MenuScene implements AppScene {
         selectedMapValue.setStyle("""
             -fx-font-size: 14px;
             -fx-font-weight: 800;
-            -fx-text-fill: #204a73;
+            -fx-text-fill: #28517c;
         """);
 
-        VBox content = new VBox(20, showroomHolder, infoBox);
-        content.setAlignment(Pos.CENTER);
-
-        center.getChildren().addAll(panel, content);
-        showroomHolder.getChildren().add(showroom);
+        showroomCard.getChildren().addAll(title, subtitle, displayRow, infoBox);
+        center.getChildren().add(showroomCard);
 
         return center;
     }
 
-    private Pane buildShowroomStage() {
-        Pane stage = new Pane();
-        stage.setPrefSize(860, 470);
-
-        Rectangle floorCard = new Rectangle(780, 382);
-        floorCard.setArcWidth(36);
-        floorCard.setArcHeight(36);
-        floorCard.setFill(Color.rgb(255, 255, 255, 0.18));
-        floorCard.setStroke(Color.rgb(255, 255, 255, 0.20));
-        floorCard.setX(40);
-        floorCard.setY(26);
-
-        Circle lightLeft = new Circle(220, 118, 94, Color.rgb(255, 255, 255, 0.15));
-        Circle lightRight = new Circle(640, 118, 82, Color.rgb(255, 255, 255, 0.11));
-
-        Rectangle carPodium = new Rectangle(270, 275);
-        carPodium.setX(92);
-        carPodium.setY(68);
-        carPodium.setArcWidth(30);
-        carPodium.setArcHeight(30);
-        carPodium.setFill(Color.rgb(255, 255, 255, 0.14));
-        carPodium.setStroke(Color.rgb(255, 255, 255, 0.18));
-
-        Rectangle charPodium = new Rectangle(248, 320);
-        charPodium.setX(500);
-        charPodium.setY(50);
-        charPodium.setArcWidth(30);
-        charPodium.setArcHeight(30);
-        charPodium.setFill(Color.rgb(255, 255, 255, 0.14));
-        charPodium.setStroke(Color.rgb(255, 255, 255, 0.18));
-
-        Label carTitle = new Label("SHOWROOM XE");
-        carTitle.setLayoutX(145);
-        carTitle.setLayoutY(28);
-        carTitle.setStyle("""
-            -fx-font-size: 18px;
+    private VBox buildDisplayBox(String title, StackPane holder, double width, double height) {
+        Label boxTitle = new Label(title);
+        boxTitle.setStyle("""
+            -fx-font-size: 20px;
             -fx-font-weight: 900;
-            -fx-text-fill: #11365d;
+            -fx-text-fill: #123a63;
         """);
 
-        Label charTitle = new Label("RACER");
-        charTitle.setLayoutX(590);
-        charTitle.setLayoutY(28);
-        charTitle.setStyle("""
-            -fx-font-size: 18px;
-            -fx-font-weight: 900;
-            -fx-text-fill: #11365d;
+        StackPane frame = new StackPane();
+        frame.setPrefSize(width, height);
+        frame.setMinSize(width, height);
+        frame.setMaxSize(width, height);
+        frame.setStyle("""
+            -fx-background-color: rgba(255,255,255,0.18);
+            -fx-background-radius: 30;
+            -fx-border-color: rgba(255,255,255,0.22);
+            -fx-border-radius: 30;
         """);
 
-        Rectangle carShadow = new Rectangle(170, 18);
-        carShadow.setX(142);
-        carShadow.setY(304);
-        carShadow.setArcWidth(18);
-        carShadow.setArcHeight(18);
-        carShadow.setFill(Color.rgb(0, 0, 0, 0.10));
+        Circle glow = new Circle(width * 0.22, Color.rgb(255, 255, 255, 0.12));
+        glow.setTranslateY(-60);
 
-        Rectangle charShadow = new Rectangle(124, 20);
-        charShadow.setX(560);
-        charShadow.setY(318);
-        charShadow.setArcWidth(18);
-        charShadow.setArcHeight(18);
-        charShadow.setFill(Color.rgb(0, 0, 0, 0.10));
+        Rectangle baseShadow = new Rectangle(width * 0.46, 22);
+        baseShadow.setArcWidth(20);
+        baseShadow.setArcHeight(20);
+        baseShadow.setFill(Color.rgb(0, 0, 0, 0.10));
+        baseShadow.setTranslateY(height * 0.31);
 
-        carHolder.setPrefSize(240, 250);
-        carHolder.setMinSize(240, 250);
-        carHolder.setMaxSize(240, 250);
-        carHolder.setLayoutX(107);
-        carHolder.setLayoutY(102);
+        holder.setPrefSize(width - 40, height - 40);
+        holder.setMinSize(width - 40, height - 40);
+        holder.setMaxSize(width - 40, height - 40);
 
-        characterHolder.setPrefSize(220, 280);
-        characterHolder.setMinSize(220, 280);
-        characterHolder.setMaxSize(220, 280);
-        characterHolder.setLayoutX(515);
-        characterHolder.setLayoutY(78);
+        frame.getChildren().addAll(glow, baseShadow, holder);
 
-        Label tip = new Label("Xe đang chọn trong Garage sẽ hiển thị ở đây");
-        tip.setLayoutX(218);
-        tip.setLayoutY(392);
-        tip.setStyle("""
-            -fx-font-size: 12px;
-            -fx-font-weight: 700;
-            -fx-text-fill: #2d5b86;
-        """);
-
-        stage.getChildren().addAll(
-                floorCard,
-                lightLeft,
-                lightRight,
-                carPodium,
-                charPodium,
-                carTitle,
-                charTitle,
-                carShadow,
-                charShadow,
-                carHolder,
-                characterHolder,
-                tip
-        );
-
-        return stage;
+        VBox box = new VBox(10, boxTitle, frame);
+        box.setAlignment(Pos.TOP_CENTER);
+        return box;
     }
 
     private Node buildRightActions() {
-        VBox actions = new VBox(14);
-        actions.setPadding(new Insets(92, 18, 18, 14));
+        VBox actions = new VBox(16);
+        actions.setPadding(new Insets(88, 20, 18, 14));
         actions.setAlignment(Pos.TOP_RIGHT);
 
-        Button btnStart = bigAction("🏁  Start Race", "#3bc484");
-        Button btnShop = bigAction("🛒  Shop", "#4195e5");
-        Button btnGarage = bigAction("🚗  Garage", "#fb8d3d");
-        Button btnBonus = bigAction("🪙  +500 Coin", "#9a5bf0");
+        Button btnStart = bigAction("🏁  Start Race", "#41c784");
+        Button btnShop = bigAction("🛒  Shop", "#4693e2");
+        Button btnGarage = bigAction("🚗  Garage", "#fb8f3f");
+        Button btnBonus = bigAction("🪙  +500 Coin", "#9660ea");
         Button btnLogout = bigAction("⎋  Đăng xuất", "#fb6666");
 
         btnStart.setOnAction(e -> game.switchState(GameState.MAP_SELECT));
@@ -335,6 +291,7 @@ public class MenuScene implements AppScene {
         btnGarage.setOnAction(e -> game.switchState(GameState.GARAGE));
         btnBonus.setOnAction(e -> {
             game.getPlayerProfile().addCoins(500);
+            game.saveProgress();
             refreshData();
         });
         btnLogout.setOnAction(e -> logout());
@@ -348,8 +305,8 @@ public class MenuScene implements AppScene {
         bottom.setPadding(new Insets(10, 14, 14, 14));
         bottom.setAlignment(Pos.CENTER_LEFT);
         bottom.setStyle("""
-            -fx-background-color: rgba(255,255,255,0.52);
-            -fx-background-radius: 20;
+            -fx-background-color: rgba(255,255,255,0.54);
+            -fx-background-radius: 22;
         """);
 
         Button home = navBtn("🏠 Home");
@@ -368,10 +325,10 @@ public class MenuScene implements AppScene {
 
     private Button bigAction(String text, String hex) {
         Button b = new Button(text);
-        b.setMinWidth(190);
-        b.setMinHeight(56);
+        b.setMinWidth(200);
+        b.setMinHeight(58);
         b.setStyle("""
-            -fx-background-radius: 20;
+            -fx-background-radius: 22;
             -fx-font-size: 15px;
             -fx-font-weight: 900;
             -fx-text-fill: white;
@@ -385,7 +342,7 @@ public class MenuScene implements AppScene {
         Button b = new Button(text);
         b.setStyle("""
             -fx-background-radius: 14;
-            -fx-background-color: rgba(255,255,255,0.78);
+            -fx-background-color: rgba(255,255,255,0.80);
             -fx-text-fill: #0d2b4f;
             -fx-font-weight: 900;
         """);
@@ -432,113 +389,40 @@ public class MenuScene implements AppScene {
             carHolder.getChildren().add(empty);
         }
 
-        characterHolder.getChildren().add(buildLobbyCharacter(equippedId));
+        characterHolder.getChildren().add(buildLobbyCharacter());
     }
 
-    private Node buildLobbyCharacter(CarId equippedId) {
-        Pane character = new Pane();
-        character.setPrefSize(190, 280);
+    private Node buildLobbyCharacter() {
+        InputStream stream = getClass().getResourceAsStream("/images/cars/ui/racer_chibi.png");
 
-        Color suitColor = getCharacterPrimary(equippedId);
-        Color detailColor = getCharacterSecondary(equippedId);
-        Color skin = Color.web("#ecd6b0");
-        Color hair = Color.web("#1f2937");
-        Color pants = Color.web("#243041");
-        Color shoes = Color.web("#111827");
+        if (stream == null) {
+            Label fallback = new Label("Chưa có ảnh racer");
+            fallback.setStyle("""
+                -fx-font-size: 15px;
+                -fx-font-weight: 800;
+                -fx-text-fill: #204a73;
+            """);
 
-        Circle hairBack = new Circle(95, 42, 36, hair);
-        Circle head = new Circle(95, 56, 33, skin);
-
-        Circle eyeL = new Circle(82, 52, 2.5, Color.web("#1f2937"));
-        Circle eyeR = new Circle(108, 52, 2.5, Color.web("#1f2937"));
-
-        Rectangle neck = new Rectangle(82, 83, 26, 16);
-        neck.setArcWidth(10);
-        neck.setArcHeight(10);
-        neck.setFill(skin);
-
-        Rectangle jacket = new Rectangle(62, 98, 68, 102);
-        jacket.setArcWidth(24);
-        jacket.setArcHeight(24);
-        jacket.setFill(suitColor);
-
-        Rectangle jacketCenter = new Rectangle(91, 98, 10, 102);
-        jacketCenter.setArcWidth(10);
-        jacketCenter.setArcHeight(10);
-        jacketCenter.setFill(detailColor);
-
-        Rectangle badge = new Rectangle(74, 118, 16, 16);
-        badge.setArcWidth(7);
-        badge.setArcHeight(7);
-        badge.setFill(Color.web("#ffffff"));
-
-        Rectangle armL = new Rectangle(42, 108, 20, 80);
-        armL.setArcWidth(18);
-        armL.setArcHeight(18);
-        armL.setFill(suitColor);
-
-        Rectangle armR = new Rectangle(130, 108, 20, 80);
-        armR.setArcWidth(18);
-        armR.setArcHeight(18);
-        armR.setFill(suitColor);
-
-        Circle handL = new Circle(52, 196, 10, skin);
-        Circle handR = new Circle(140, 196, 10, skin);
-
-        Rectangle legL = new Rectangle(73, 198, 20, 66);
-        legL.setArcWidth(12);
-        legL.setArcHeight(12);
-        legL.setFill(pants);
-
-        Rectangle legR = new Rectangle(98, 198, 20, 66);
-        legR.setArcWidth(12);
-        legR.setArcHeight(12);
-        legR.setFill(pants);
-
-        Rectangle shoeL = new Rectangle(66, 260, 34, 14);
-        shoeL.setArcWidth(8);
-        shoeL.setArcHeight(8);
-        shoeL.setFill(shoes);
-
-        Rectangle shoeR = new Rectangle(95, 260, 34, 14);
-        shoeR.setArcWidth(8);
-        shoeR.setArcHeight(8);
-        shoeR.setFill(shoes);
-
-        character.getChildren().addAll(
-                hairBack, head, eyeL, eyeR, neck,
-                jacket, jacketCenter, badge,
-                armL, armR, handL, handR,
-                legL, legR, shoeL, shoeR
-        );
-
-        return character;
-    }
-
-    private Color getCharacterPrimary(CarId carId) {
-        if (carId == null) {
-            return Color.web("#f2d34f");
+            StackPane wrapper = new StackPane(fallback);
+            wrapper.setPrefSize(220, 280);
+            wrapper.setMinSize(220, 280);
+            wrapper.setMaxSize(220, 280);
+            return wrapper;
         }
 
-        return switch (carId) {
-            case RED_RACER -> Color.web("#f2d34f");
-            case BLUE_STORM -> Color.web("#66b3ff");
-            case BLACK_SHADOW -> Color.web("#7c67ff");
-            default -> Color.web("#94a3b8");
-        };
-    }
+        Image image = new Image(stream);
+        ImageView imageView = new ImageView(image);
+        imageView.setFitWidth(220);
+        imageView.setFitHeight(260);
+        imageView.setPreserveRatio(true);
+        imageView.setSmooth(true);
 
-    private Color getCharacterSecondary(CarId carId) {
-        if (carId == null) {
-            return Color.web("#ef4444");
-        }
+        StackPane wrapper = new StackPane(imageView);
+        wrapper.setPrefSize(220, 280);
+        wrapper.setMinSize(220, 280);
+        wrapper.setMaxSize(220, 280);
 
-        return switch (carId) {
-            case RED_RACER -> Color.web("#ef4444");
-            case BLUE_STORM -> Color.web("#1d4ed8");
-            case BLACK_SHADOW -> Color.web("#111827");
-            default -> Color.web("#475569");
-        };
+        return wrapper;
     }
 
     private String toDisplayName() {
@@ -555,6 +439,7 @@ public class MenuScene implements AppScene {
 
     private void logout() {
         try {
+            game.saveProgress();
             UserSession.clear();
 
             Stage stage = (Stage) scene.getWindow();
