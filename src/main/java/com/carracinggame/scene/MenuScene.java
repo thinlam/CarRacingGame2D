@@ -52,20 +52,25 @@ public class MenuScene implements AppScene {
         this.characterHolder = new StackPane();
 
         BorderPane root = new BorderPane();
-        root.setPrefSize(GameConfig.WIDTH, GameConfig.HEIGHT);
+        root.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         root.setStyle("""
-            -fx-background-color:
-                radial-gradient(center 18% 10%, radius 36%, rgba(255,255,255,0.30), transparent 60%),
-                radial-gradient(center 84% 12%, radius 28%, rgba(255,255,255,0.14), transparent 60%),
-                linear-gradient(to bottom, #8fcfff 0%, #b9e4ff 46%, #dff3ff 100%);
-        """);
+    -fx-background-color:
+        radial-gradient(center 18% 10%, radius 36%, rgba(255,255,255,0.30), transparent 60%),
+        radial-gradient(center 84% 12%, radius 28%, rgba(255,255,255,0.14), transparent 60%),
+        linear-gradient(to bottom, #8fcfff 0%, #b9e4ff 46%, #dff3ff 100%);
+""");
 
         root.setTop(buildTopBar());
         root.setCenter(buildCenterArea());
         root.setRight(buildRightActions());
         root.setBottom(buildBottomNav());
 
-        this.scene = new Scene(root, GameConfig.WIDTH, GameConfig.HEIGHT);
+        this.scene = new Scene(root);
+
+// cho root luôn full theo cửa sổ
+        root.prefWidthProperty().bind(scene.widthProperty());
+        root.prefHeightProperty().bind(scene.heightProperty());
+
         refreshData();
     }
 
@@ -283,7 +288,7 @@ public class MenuScene implements AppScene {
         Button btnStart = bigAction("🏁  Start Race", "#41c784");
         Button btnShop = bigAction("🛒  Shop", "#4693e2");
         Button btnGarage = bigAction("🚗  Garage", "#fb8f3f");
-        Button btnBonus = bigAction("🪙  +500 Coin", "#9660ea");
+        Button btnBonus = bigAction("🪙  Điểm danh", "#9660ea");
         Button btnLogout = bigAction("⎋  Đăng xuất", "#fb6666");
 
         btnStart.setOnAction(e -> game.switchState(GameState.MAP_SELECT));

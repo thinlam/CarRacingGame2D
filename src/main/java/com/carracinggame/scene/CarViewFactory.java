@@ -20,12 +20,23 @@ public final class CarViewFactory {
     }
 
     public static Node createLobbyPreview(CarId carId) {
-        return createPreview(carId, 240, 250, 2.35, 18);
+        // giảm kích thước xe ở menu / lobby cho vừa mắt hơn
+        return createPreview(carId, 210, 210, 1.6, 6);
     }
 
     public static Node createRaceCar(CarId carId) {
+        return createPlayerRaceCar(carId);
+    }
+
+    public static Node createPlayerRaceCar(CarId carId) {
         Group car = buildTopViewCar(carId);
-        car.setRotate(180); // đầu xe hướng lên trên khi đua
+        car.setRotate(0); // xe người chơi hướng lên
+        return car;
+    }
+
+    public static Node createObstacleRaceCar(CarId carId) {
+        Group car = buildTopViewCar(carId);
+        car.setRotate(180); // xe AI / vật cản hướng xuống
         return car;
     }
 

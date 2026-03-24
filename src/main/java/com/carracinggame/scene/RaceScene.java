@@ -5,6 +5,7 @@ import com.carracinggame.core.Game;
 import com.carracinggame.core.GameState;
 import com.carracinggame.map.MapId;
 import javafx.animation.AnimationTimer;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -17,6 +18,7 @@ import javafx.scene.control.Label;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 
 import java.util.ArrayList;
@@ -33,8 +35,19 @@ public class RaceScene implements AppScene {
     private static final double ROAD_W = 300;
     private static final double ROAD_X = (VIEW_W - ROAD_W) / 2.0;
 
-    private static final double PLAYER_Y = 625;
+    private static final double PLAYER_Y = 620;
     private static final double TRACK_LENGTH = 7000;
+
+    // START nằm phía trước đầu xe
+    private static final double LINE_SCREEN_OFFSET = 95;
+    private static final double START_LINE_DISTANCE = 0;
+    private static final double FINISH_LINE_DISTANCE = TRACK_LENGTH;
+
+    // GIẢM KÍCH THƯỚC XE
+    private static final double PLAYER_ACTOR_W = 64;
+    private static final double PLAYER_ACTOR_H = 98;
+    private static final double AI_ACTOR_W = 64;
+    private static final double AI_ACTOR_H = 98;
 
     private final Game game;
     private final Scene scene;
@@ -54,6 +67,7 @@ public class RaceScene implements AppScene {
     private final Random random = new Random();
 
     private final StackPane playerActor;
+
     private AnimationTimer timer;
     private long lastFrame = 0L;
 
@@ -63,6 +77,7 @@ public class RaceScene implements AppScene {
 
     private double roadScroll = 0;
     private boolean finished = false;
+    private boolean finishDialogShown = false;
 
     private double countdownTime = 4.0;
     private boolean raceStarted = false;
@@ -71,11 +86,15 @@ public class RaceScene implements AppScene {
         this.game = game;
 
         this.canvas = new Canvas(VIEW_W, VIEW_H);
+
         this.actorLayer = new Pane();
         this.actorLayer.setPrefSize(VIEW_W, VIEW_H);
         this.actorLayer.setMinSize(VIEW_W, VIEW_H);
         this.actorLayer.setMaxSize(VIEW_W, VIEW_H);
         this.actorLayer.setMouseTransparent(true);
+
+        Rectangle actorClip = new Rectangle(VIEW_W, VIEW_H);
+        actorLayer.setClip(actorClip);
 
         this.miniMapCanvas = new Canvas(120, 160);
 
@@ -92,13 +111,7 @@ public class RaceScene implements AppScene {
             -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.35), 16, 0.3, 0, 4);
         """);
 
-        this.playerActor = createActor(
-                game.getGarageService().getEquippedCar().getId(),
-                2.15,
-                92,
-                138
-        );
-
+        this.playerActor = createPlayerActor(getEquippedCarId(), 1.35, PLAYER_ACTOR_W, PLAYER_ACTOR_H);
         BorderPane root = new BorderPane();
         root.setStyle("""
             -fx-background-color:
@@ -121,6 +134,11 @@ public class RaceScene implements AppScene {
             -fx-border-radius: 28;
         """);
 
+        Rectangle frameClip = new Rectangle(VIEW_W, VIEW_H);
+        frameClip.setArcWidth(28);
+        frameClip.setArcHeight(28);
+        raceFrame.setClip(frameClip);
+
         raceFrame.getChildren().addAll(canvas, actorLayer, countdownLabel);
         raceRoot.getChildren().add(raceFrame);
 
@@ -137,6 +155,7 @@ public class RaceScene implements AppScene {
         configureInput();
         initActors();
         initTimer();
+        updateHud();
         redraw();
     }
 
@@ -148,15 +167,7 @@ public class RaceScene implements AppScene {
     @Override
     public void onShow() {
         scene.getRoot().requestFocus();
-        lastFrame = 0L;
-        finished = false;
-        raceStarted = false;
-        countdownTime = 4.0;
-        playerSpeed = 0;
-        playerDistance = 0;
-        roadScroll = 0;
-        playerX = laneCenter(1);
-        initActors();
+        resetRace();
         timer.start();
     }
 
@@ -166,6 +177,24 @@ public class RaceScene implements AppScene {
             timer.stop();
         }
         pressedKeys.clear();
+    }
+
+    private void resetRace() {
+        lastFrame = 0L;
+        finished = false;
+        finishDialogShown = false;
+        raceStarted = false;
+        countdownTime = 4.0;
+
+        playerSpeed = 0;
+        playerDistance = 0;
+        roadScroll = 0;
+        playerX = laneCenter(1);
+
+        pressedKeys.clear();
+        initActors();
+        updateHud();
+        redraw();
     }
 
     private Node buildTopBar() {
@@ -212,7 +241,12 @@ public class RaceScene implements AppScene {
             -fx-text-fill: white;
             -fx-font-weight: 900;
         """);
-        backBtn.setOnAction(e -> game.goTo(GameState.MENU));
+        backBtn.setOnAction(e -> {
+            if (timer != null) {
+                timer.stop();
+            }
+            tryGoMenu();
+        });
 
         top.getChildren().addAll(title, speedLabel, distanceLabel, mapLabel, spacer, backBtn);
         return top;
@@ -267,16 +301,29 @@ public class RaceScene implements AppScene {
 
         aiCars.clear();
 
-        // 6 xe AI xếp ở vạch xuất phát
-        aiCars.add(new AiCar(CarId.BLUE_STORM, laneCenter(0), PLAYER_Y - 40, 190));
-        aiCars.add(new AiCar(CarId.BLACK_SHADOW, laneCenter(2), PLAYER_Y - 70, 205));
-        aiCars.add(new AiCar(CarId.RED_RACER, laneCenter(3), PLAYER_Y - 120, 180));
-        aiCars.add(new AiCar(CarId.BLUE_STORM, laneCenter(1), PLAYER_Y - 170, 210));
-        aiCars.add(new AiCar(CarId.BLACK_SHADOW, laneCenter(0), PLAYER_Y - 240, 195));
-        aiCars.add(new AiCar(CarId.RED_RACER, laneCenter(2), PLAYER_Y - 300, 185));
+        aiCars.add(new AiCar(randomAiCarId(), laneCenter(0), VIEW_H + 220, 190));
+        aiCars.add(new AiCar(randomAiCarId(), laneCenter(1), VIEW_H + 320, 205));
+        aiCars.add(new AiCar(randomAiCarId(), laneCenter(2), VIEW_H + 420, 180));
+        aiCars.add(new AiCar(randomAiCarId(), laneCenter(3), VIEW_H + 520, 210));
+        aiCars.add(new AiCar(randomAiCarId(), laneCenter(0), VIEW_H + 620, 195));
+        aiCars.add(new AiCar(randomAiCarId(), laneCenter(2), VIEW_H + 720, 185));
 
         for (AiCar aiCar : aiCars) {
+            aiCar.actor.setVisible(false);
             actorLayer.getChildren().add(aiCar.actor);
+        }
+    }
+
+    private void releaseAiCars() {
+        double[] startYs = {-120, -240, -360, -480, -600, -720};
+
+        for (int i = 0; i < aiCars.size(); i++) {
+            AiCar aiCar = aiCars.get(i);
+            aiCar.screenY = startYs[i % startYs.length];
+            aiCar.x = laneCenter(random.nextInt(4));
+            aiCar.speed = 160 + random.nextInt(110);
+            aiCar.actor.setVisible(true);
+            aiCar.resetCar(randomAiCarId());
         }
     }
 
@@ -317,6 +364,7 @@ public class RaceScene implements AppScene {
         updateHud();
 
         if (playerDistance >= TRACK_LENGTH) {
+            playerDistance = TRACK_LENGTH;
             finishRace();
         }
     }
@@ -338,7 +386,11 @@ public class RaceScene implements AppScene {
             countdownLabel.setVisible(true);
         } else {
             countdownLabel.setVisible(false);
-            raceStarted = true;
+
+            if (!raceStarted) {
+                raceStarted = true;
+                releaseAiCars();
+            }
         }
     }
 
@@ -371,25 +423,30 @@ public class RaceScene implements AppScene {
 
     private void updatePlayerState(double dt) {
         playerDistance += playerSpeed * dt;
+        if (playerDistance > TRACK_LENGTH) {
+            playerDistance = TRACK_LENGTH;
+        }
         roadScroll += playerSpeed * dt;
     }
 
     private void updateAiCars(double dt) {
         for (AiCar aiCar : aiCars) {
-            aiCar.screenY += (playerSpeed - aiCar.speed) * dt;
+            aiCar.screenY += (aiCar.speed + playerSpeed * 0.35) * dt;
 
-            if (aiCar.screenY > VIEW_H + 120) {
-                aiCar.screenY = -140 - random.nextInt(260);
+            if (aiCar.screenY > VIEW_H + 140) {
+                aiCar.screenY = -160 - random.nextInt(320);
                 aiCar.x = laneCenter(random.nextInt(4));
                 aiCar.speed = 160 + random.nextInt(110);
+                aiCar.resetCar(randomAiCarId());
             }
 
-            boolean collideX = Math.abs(aiCar.x - playerX) < 38;
-            boolean collideY = Math.abs(aiCar.screenY - PLAYER_Y) < 56;
+            boolean collideX = Math.abs(aiCar.x - playerX) < 34;
+            boolean collideY = Math.abs(aiCar.screenY - PLAYER_Y) < 48;
 
             if (collideX && collideY) {
-                playerSpeed *= 0.80;
+                playerSpeed *= 0.78;
                 playerX += aiCar.x >= playerX ? -24 : 24;
+                playerX = clamp(playerX, ROAD_X + 30, ROAD_X + ROAD_W - 30);
             }
         }
     }
@@ -430,19 +487,41 @@ public class RaceScene implements AppScene {
         gc.setFill(Color.rgb(255, 255, 255, 0.03));
         gc.fillRect(ROAD_X + ROAD_W * 0.25, 0, ROAD_W * 0.5, VIEW_H);
 
-        drawStartLine(gc);
+        drawStartAndFinishLines(gc);
     }
 
-    private void drawStartLine(GraphicsContext gc) {
-        double lineY = PLAYER_Y + 70 + (roadScroll % 1600);
-        if (lineY > -40 && lineY < VIEW_H + 40) {
+    private void drawStartAndFinishLines(GraphicsContext gc) {
+        double startY = PLAYER_Y - LINE_SCREEN_OFFSET - (START_LINE_DISTANCE - playerDistance);
+        double finishY = PLAYER_Y + LINE_SCREEN_OFFSET - (FINISH_LINE_DISTANCE - playerDistance);
+
+        drawCheckLine(gc, startY, Color.WHITE, Color.web("#d9d9d9"));
+        drawCheckLine(gc, finishY, Color.WHITE, Color.BLACK);
+
+        if (startY >= -20 && startY <= VIEW_H + 20) {
             gc.setFill(Color.WHITE);
-            for (int i = 0; i < 10; i++) {
-                double x = ROAD_X + i * (ROAD_W / 10.0);
-                if (i % 2 == 0) {
-                    gc.fillRect(x, lineY, ROAD_W / 10.0, 10);
-                }
-            }
+            gc.setFont(Font.font(14));
+            gc.fillText("START", ROAD_X + ROAD_W + 14, startY + 10);
+        }
+
+        if (finishY >= -20 && finishY <= VIEW_H + 20) {
+            gc.setFill(Color.WHITE);
+            gc.setFont(Font.font(14));
+            gc.fillText("FINISH", ROAD_X + ROAD_W + 14, finishY + 10);
+        }
+    }
+
+    private void drawCheckLine(GraphicsContext gc, double y, Color colorA, Color colorB) {
+        if (y < -20 || y > VIEW_H + 20) {
+            return;
+        }
+
+        double blockW = ROAD_W / 6.0;
+        double lineH = 12;
+
+        for (int i = 0; i < 6; i++) {
+            double x = ROAD_X + i * blockW;
+            gc.setFill(i % 2 == 0 ? colorA : colorB);
+            gc.fillRect(x, y, blockW, lineH);
         }
     }
 
@@ -487,15 +566,15 @@ public class RaceScene implements AppScene {
     }
 
     private void positionActors() {
-        setActorPosition(playerActor, playerX, PLAYER_Y, 92, 138, 1.0);
+        setActorPosition(playerActor, playerX, PLAYER_Y, PLAYER_ACTOR_W, PLAYER_ACTOR_H, 1.0);
         playerActor.toFront();
 
         for (AiCar aiCar : aiCars) {
-            boolean visible = aiCar.screenY > -120 && aiCar.screenY < VIEW_H + 80;
+            boolean visible = raceStarted && aiCar.screenY > -140 && aiCar.screenY < VIEW_H + 90;
             aiCar.actor.setVisible(visible);
 
             if (visible) {
-                setActorPosition(aiCar.actor, aiCar.x, aiCar.screenY, 92, 138, 1.0);
+                setActorPosition(aiCar.actor, aiCar.x, aiCar.screenY, AI_ACTOR_W, AI_ACTOR_H, 1.0);
             }
         }
     }
@@ -529,6 +608,9 @@ public class RaceScene implements AppScene {
         drawMiniDot(gc, w / 2.0, miniY(playerDistance, h), Color.web("#ff5f57"), 6);
 
         for (AiCar aiCar : aiCars) {
+            if (!raceStarted) {
+                continue;
+            }
             double aiDistance = clamp(playerDistance + (PLAYER_Y - aiCar.screenY) * 6.0, 0, TRACK_LENGTH);
             drawMiniDot(gc, w / 2.0, miniY(aiDistance, h), Color.web("#7dd3fc"), 4.5);
         }
@@ -551,28 +633,52 @@ public class RaceScene implements AppScene {
     }
 
     private void finishRace() {
-        finished = true;
-        timer.stop();
+        if (finished || finishDialogShown) {
+            return;
+        }
 
-        game.getPlayerProfile().addCoins(300);
+        finished = true;
+        finishDialogShown = true;
+
+        if (timer != null) {
+            timer.stop();
+        }
+
+        try {
+            game.getPlayerProfile().addCoins(300);
+        } catch (Exception ignored) {
+        }
+
         try {
             game.saveProgress();
         } catch (Exception ignored) {
         }
 
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Về đích");
-        alert.setHeaderText("Bạn đã hoàn thành chặng đua Miền Bắc!");
-        alert.setContentText("Thưởng: +300 coin");
-        alert.showAndWait();
-
-        game.goTo(GameState.MENU);
+        Platform.runLater(() -> {
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("Về đích");
+            alert.setHeaderText("Bạn đã hoàn thành chặng đua " + mapDisplayName() + "!");
+            alert.setContentText("Thưởng: +300 coin");
+            alert.showAndWait();
+            tryGoMenu();
+        });
     }
 
-    private StackPane createActor(CarId carId, double scale, double width, double height) {
-        Node carNode = CarViewFactory.createRaceCar(carId);
-        carNode.setRotate(180); // đầu xe hướng lên trên
+    private StackPane createPlayerActor(CarId carId, double scale, double width, double height) {
+        Node carNode = CarViewFactory.createPlayerRaceCar(carId);
+        carNode.setScaleX(scale);
+        carNode.setScaleY(scale);
 
+        StackPane wrapper = new StackPane(carNode);
+        wrapper.setPrefSize(width, height);
+        wrapper.setMinSize(width, height);
+        wrapper.setMaxSize(width, height);
+        wrapper.setMouseTransparent(true);
+        return wrapper;
+    }
+
+    private StackPane createAiActor(CarId carId, double scale, double width, double height) {
+        Node carNode = CarViewFactory.createObstacleRaceCar(carId);
         carNode.setScaleX(scale);
         carNode.setScaleY(scale);
 
@@ -607,16 +713,54 @@ public class RaceScene implements AppScene {
     }
 
     private String mapDisplayName() {
-        MapId mapId = game.getSelectedMap();
-        if (mapId == null) {
+        try {
+            MapId mapId = game.getSelectedMap();
+            if (mapId == null) {
+                return "Miền Bắc";
+            }
+
+            return switch (mapId) {
+                case NORTH -> "Miền Bắc";
+                case CENTRAL -> "Miền Trung";
+                case SOUTH -> "Miền Nam";
+            };
+        } catch (Exception e) {
             return "Miền Bắc";
         }
+    }
 
-        return switch (mapId) {
-            case NORTH -> "Miền Bắc";
-            case CENTRAL -> "Miền Trung";
-            case SOUTH -> "Miền Nam";
+    private CarId getEquippedCarId() {
+        try {
+            if (game.getGarageService() != null
+                    && game.getGarageService().getEquippedCar() != null
+                    && game.getGarageService().getEquippedCar().getId() != null) {
+                return game.getGarageService().getEquippedCar().getId();
+            }
+        } catch (Exception ignored) {
+        }
+        return CarId.BLUE_STORM;
+    }
+
+    private CarId randomAiCarId() {
+        CarId[] ids = {
+                CarId.RED_RACER,
+                CarId.BLUE_STORM,
+                CarId.BLACK_SHADOW
         };
+        return ids[random.nextInt(ids.length)];
+    }
+
+    private void tryGoMenu() {
+        try {
+            game.goTo(GameState.MENU);
+            return;
+        } catch (Exception ignored) {
+        }
+
+        try {
+            game.switchState(GameState.MENU);
+        } catch (Exception ignored) {
+        }
     }
 
     private double clamp(double value, double min, double max) {
@@ -633,7 +777,15 @@ public class RaceScene implements AppScene {
             this.x = x;
             this.screenY = screenY;
             this.speed = speed;
-            this.actor = createActor(carId, 1.95, 92, 138);
+            this.actor = createAiActor(carId, 1.3, AI_ACTOR_W, AI_ACTOR_H);
+        }
+
+        private void resetCar(CarId carId) {
+            actor.getChildren().clear();
+            Node carNode = CarViewFactory.createObstacleRaceCar(carId);
+            carNode.setScaleX(1.3);
+            carNode.setScaleY(1.3);
+            actor.getChildren().add(carNode);
         }
     }
 }
