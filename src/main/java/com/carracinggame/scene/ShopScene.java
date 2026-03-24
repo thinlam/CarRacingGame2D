@@ -1,25 +1,30 @@
 package com.carracinggame.scene;
 
 import com.carracinggame.car.CarDefinition;
+import com.carracinggame.car.CarId;
 import com.carracinggame.core.Game;
 import com.carracinggame.core.GameConfig;
 import com.carracinggame.core.GameState;
 import com.carracinggame.shop.ShopService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import com.carracinggame.scene.CarViewFactory;
 
 public class ShopScene implements AppScene {
 
@@ -27,9 +32,9 @@ public class ShopScene implements AppScene {
     private final ShopService shopService;
     private final Scene scene;
 
-    private Label messageLabel;
-    private Label coinsLabel;
-    private VBox listContainer;
+    private final Label messageLabel;
+    private final Label coinsLabel;
+    private final VBox listContainer;
 
     public ShopScene(Game game) {
         this.game = game;
@@ -60,6 +65,7 @@ public class ShopScene implements AppScene {
 
         ScrollPane scrollPane = new ScrollPane(listContainer);
         scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
         root.setCenter(scrollPane);
 
@@ -85,9 +91,7 @@ public class ShopScene implements AppScene {
         for (CarDefinition car : shopService.getCars()) {
             boolean owned = game.getGarageService().ownsCar(car.getId());
 
-            Rectangle preview = new Rectangle(90, 56, car.getAccentColor());
-            preview.setArcHeight(18);
-            preview.setArcWidth(18);
+            Node preview = createCarPreview(car);
 
             Label name = new Label(car.getName());
             name.setTextFill(Color.WHITE);
@@ -140,6 +144,94 @@ public class ShopScene implements AppScene {
         }
     }
 
+    private Node createCarPreview(CarDefinition car) {
+        StackPane previewBox = new StackPane();
+        previewBox.setPrefSize(190, 110);
+        previewBox.setMinSize(190, 110);
+        previewBox.setMaxSize(190, 110);
+        previewBox.setStyle("""
+        -fx-background-color: rgba(255,255,255,0.05);
+        -fx-background-radius: 18;
+        -fx-border-color: rgba(255,255,255,0.10);
+        -fx-border-radius: 18;
+    """);
+
+        Node carView = CarViewFactory.createShopPreview(car.getId());
+        previewBox.getChildren().add(carView);
+
+        return previewBox;
+    }
+
+    private Node buildTopViewCar(CarDefinition car) {
+        Pane sprite = new Pane();
+        sprite.setPrefSize(48, 86);
+        sprite.setScaleX(1.9);
+        sprite.setScaleY(1.9);
+
+        Color bodyColor = getBodyColor(car.getId());
+        Color centerColor = getCenterColor(car.getId());
+        Color wingColor = bodyColor.darker();
+        Color tireColor = Color.web("#2b2b2b");
+        Color lightColor = Color.web("#f8fafc");
+
+        Rectangle rearWing = rect(16, 4, wingColor, 16, 2, 3, 3);
+        Rectangle rearBody = rect(12, 8, bodyColor, 18, 7, 4, 4);
+        Rectangle body = rect(18, 38, bodyColor, 15, 15, 6, 6);
+        Rectangle cockpit = rect(10, 18, centerColor, 19, 24, 4, 4);
+        Rectangle nose = rect(10, 10, lightColor, 19, 54, 4, 4);
+        Rectangle frontWing = rect(18, 4, lightColor, 15, 67, 3, 3);
+
+        Rectangle tireLT = rect(4, 10, tireColor, 11, 18, 2, 2);
+        Rectangle tireRT = rect(4, 10, tireColor, 33, 18, 2, 2);
+        Rectangle tireLB = rect(4, 10, tireColor, 11, 46, 2, 2);
+        Rectangle tireRB = rect(4, 10, tireColor, 33, 46, 2, 2);
+
+        Rectangle sideLeftTop = rect(3, 8, wingColor, 13, 28, 2, 2);
+        Rectangle sideRightTop = rect(3, 8, wingColor, 32, 28, 2, 2);
+        Rectangle sideLeftBottom = rect(3, 8, wingColor, 13, 40, 2, 2);
+        Rectangle sideRightBottom = rect(3, 8, wingColor, 32, 40, 2, 2);
+
+        Rectangle rearLight = rect(8, 3, lightColor, 20, 10, 2, 2);
+        Rectangle frontLight = rect(8, 3, Color.web("#fde68a"), 20, 61, 2, 2);
+
+        sprite.getChildren().addAll(
+                rearWing, rearBody, body, cockpit, nose, frontWing,
+                tireLT, tireRT, tireLB, tireRB,
+                sideLeftTop, sideRightTop, sideLeftBottom, sideRightBottom,
+                rearLight, frontLight
+        );
+
+        return sprite;
+    }
+
+    private Rectangle rect(double w, double h, Color color,
+                           double x, double y, double arcW, double arcH) {
+        Rectangle r = new Rectangle(w, h, color);
+        r.setX(x);
+        r.setY(y);
+        r.setArcWidth(arcW);
+        r.setArcHeight(arcH);
+        return r;
+    }
+
+    private Color getBodyColor(CarId carId) {
+        return switch (carId) {
+            case RED_RACER -> Color.web("#ef4444");
+            case BLUE_STORM -> Color.web("#2563eb");
+            case BLACK_SHADOW -> Color.web("#111827");
+            default -> Color.web("#9ca3af");
+        };
+    }
+
+    private Color getCenterColor(CarId carId) {
+        return switch (carId) {
+            case RED_RACER -> Color.web("#facc15");
+            case BLUE_STORM -> Color.web("#93c5fd");
+            case BLACK_SHADOW -> Color.web("#a78bfa");
+            default -> Color.web("#e5e7eb");
+        };
+    }
+
     @Override
     public Scene getScene() {
         return scene;
@@ -149,9 +241,5 @@ public class ShopScene implements AppScene {
     public void onShow() {
         refresh();
         requestFocus();
-    }
-
-    @Override
-    public void onHide() {
     }
 }

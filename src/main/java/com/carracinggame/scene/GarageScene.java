@@ -1,12 +1,14 @@
 package com.carracinggame.scene;
 
 import com.carracinggame.car.CarDefinition;
+import com.carracinggame.car.CarId;
 import com.carracinggame.core.Game;
 import com.carracinggame.core.GameConfig;
 import com.carracinggame.core.GameState;
 import com.carracinggame.garage.GarageService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -15,9 +17,9 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
@@ -27,8 +29,8 @@ public class GarageScene implements AppScene {
     private final GarageService garageService;
     private final Scene scene;
 
-    private Label messageLabel;
-    private VBox listContainer;
+    private final Label messageLabel;
+    private final VBox listContainer;
 
     public GarageScene(Game game) {
         this.game = game;
@@ -50,6 +52,7 @@ public class GarageScene implements AppScene {
 
         ScrollPane scrollPane = new ScrollPane(listContainer);
         scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
 
         Button backButton = new Button("Quay lại menu");
@@ -77,11 +80,10 @@ public class GarageScene implements AppScene {
         listContainer.getChildren().clear();
 
         for (CarDefinition car : garageService.getOwnedCarDefinitions()) {
-            boolean equipped = garageService.getEquippedCar().getId() == car.getId();
+            boolean equipped = garageService.getEquippedCar() != null
+                    && garageService.getEquippedCar().getId() == car.getId();
 
-            Rectangle preview = new Rectangle(90, 56, car.getAccentColor());
-            preview.setArcHeight(18);
-            preview.setArcWidth(18);
+            Node preview = createCarPreview(car.getId());
 
             Label name = new Label(car.getName());
             name.setTextFill(Color.WHITE);
@@ -100,7 +102,10 @@ public class GarageScene implements AppScene {
             actionButton.setDisable(equipped);
             actionButton.setFont(Font.font("Arial", FontWeight.BOLD, 16));
             actionButton.setTextFill(Color.WHITE);
-            actionButton.setStyle("-fx-background-color: " + (equipped ? "#4b5563" : "#10b981") + "; -fx-background-radius: 14;");
+            actionButton.setStyle(
+                    "-fx-background-color: " + (equipped ? "#4b5563" : "#10b981") + "; -fx-background-radius: 14;"
+            );
+
             actionButton.setOnAction(event -> {
                 garageService.equipCar(car.getId());
                 messageLabel.setText("Đã chọn " + car.getName() + " làm xe hiện tại.");
@@ -117,6 +122,24 @@ public class GarageScene implements AppScene {
 
             listContainer.getChildren().add(card);
         }
+    }
+
+    private Node createCarPreview(CarId carId) {
+        StackPane previewBox = new StackPane();
+        previewBox.setPrefSize(190, 110);
+        previewBox.setMinSize(190, 110);
+        previewBox.setMaxSize(190, 110);
+        previewBox.setStyle("""
+            -fx-background-color: rgba(255,255,255,0.05);
+            -fx-background-radius: 18;
+            -fx-border-color: rgba(255,255,255,0.10);
+            -fx-border-radius: 18;
+        """);
+
+        Node carView = CarViewFactory.createShopPreview(carId);
+        previewBox.getChildren().add(carView);
+
+        return previewBox;
     }
 
     @Override

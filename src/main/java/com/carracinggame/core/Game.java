@@ -39,7 +39,7 @@ public class Game {
         stage.setHeight(GameConfig.HEIGHT);
         stage.setMinWidth(GameConfig.MIN_WIDTH);
         stage.setMinHeight(GameConfig.MIN_HEIGHT);
-        stage.setResizable(false);
+        stage.setResizable(true);
         stage.centerOnScreen();
 
         switchState(GameState.MENU);
