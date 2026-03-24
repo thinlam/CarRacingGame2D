@@ -4,6 +4,7 @@ import com.carracinggame.core.Game;
 import com.carracinggame.database.MongoDBConnection;
 import com.carracinggame.scene.LoginScene;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import javafx.stage.Stage;
 
@@ -17,43 +18,44 @@ public class MainApp extends Application {
         try {
             MongoDBConnection.init();
 
-            stage.setTitle("Car Racing Game 2D");
-
-            // Kích thước khởi tạo ban đầu
+            stage.setTitle("Car Racing 2D - Login");
             stage.setWidth(APP_WIDTH);
             stage.setHeight(APP_HEIGHT);
 
-            // Cho phép resize để dùng được nút -, ô vuông, X
+            // Cho phép bấm -, ô vuông, X
             stage.setResizable(true);
+            stage.setMinWidth(1100);
+            stage.setMinHeight(720);
+            stage.centerOnScreen();
 
-            // Kích thước nhỏ nhất để layout không bể
-            stage.setMinWidth(1000);
-            stage.setMinHeight(650);
+            stage.setOnCloseRequest(event -> {
+                Platform.exit();
+                System.exit(0);
+            });
 
+            // Mở app là vào đăng nhập trước
             stage.setScene(LoginScene.create(stage, () -> {
                 Game game = new Game(stage);
                 game.start();
             }));
 
-            // Mở ra ở trạng thái phóng to cửa sổ
-            // vẫn còn thanh tiêu đề, nút -, ô vuông, X
             stage.setMaximized(true);
-
             stage.show();
 
         } catch (Exception e) {
             e.printStackTrace();
 
             Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle("MongoDB Atlas Error");
-            alert.setHeaderText("Không kết nối được MongoDB Atlas");
-            alert.setContentText(e.getMessage());
+            alert.setTitle("Lỗi khởi động");
+            alert.setHeaderText(null);
+            alert.setContentText("Không thể khởi động game: " + e.getMessage());
             alert.showAndWait();
         }
     }
 
     @Override
     public void stop() {
+        System.out.println("Game closed.");
         MongoDBConnection.close();
     }
 

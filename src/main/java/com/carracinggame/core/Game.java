@@ -1,32 +1,72 @@
 package com.carracinggame.core;
 
+import com.carracinggame.car.CarId;
+import com.carracinggame.database.PlayerDAO;
+import com.carracinggame.garage.GarageService;
 import com.carracinggame.map.MapId;
+import com.carracinggame.player.PlayerProfile;
 import com.carracinggame.scene.AppScene;
+import com.carracinggame.scene.GarageScene;
 import com.carracinggame.scene.MapSelectScene;
 import com.carracinggame.scene.MenuScene;
 import com.carracinggame.scene.RaceScene;
+import com.carracinggame.scene.ShopScene;
+import com.carracinggame.shop.ShopService;
 import javafx.stage.Stage;
 
 public class Game {
+
     private final Stage stage;
 
     private GameState state;
     private AppScene currentScene;
-
-    // NEW: map đang chọn
     private MapId selectedMap = MapId.NORTH;
+
+    private final PlayerProfile playerProfile;
+    private final GarageService garageService;
+    private final ShopService shopService;
 
     public Game(Stage stage) {
         this.stage = stage;
-        this.stage.setTitle("Car Racing Game 2D");
+        this.stage.setTitle(GameConfig.GAME_TITLE);
+
+        PlayerDAO playerDAO = new PlayerDAO();
+        String username = UserSession.getUsername();
+
+        PlayerDAO.PlayerGameData savedData = playerDAO.loadGameData(username);
+
+        this.playerProfile = new PlayerProfile(
+                savedData.getUsername(),
+                savedData.getCoins(),
+                savedData.getEquippedCarId() == null ? CarId.RED_RACER : savedData.getEquippedCarId()
+        );
+
+        this.garageService = new GarageService(playerProfile);
+        this.garageService.loadOwnedCars(
+                savedData.getOwnedCarIds(),
+                savedData.getEquippedCarId()
+        );
+
+        this.shopService = new ShopService();
     }
 
     public void start() {
+        stage.setWidth(GameConfig.WIDTH);
+        stage.setHeight(GameConfig.HEIGHT);
+        stage.setMinWidth(GameConfig.MIN_WIDTH);
+        stage.setMinHeight(GameConfig.MIN_HEIGHT);
+        stage.setResizable(true);
+        stage.centerOnScreen();
+
         switchState(GameState.MENU);
         stage.show();
     }
 
     public void switchState(GameState newState) {
+        if (newState == null) {
+            return;
+        }
+
         if (currentScene != null) {
             currentScene.onHide();
         }
@@ -36,17 +76,46 @@ public class Game {
 
         stage.setScene(currentScene.getScene());
         currentScene.onShow();
+        currentScene.requestFocus();
     }
 
     private AppScene createSceneByState(GameState state) {
         return switch (state) {
             case MENU -> new MenuScene(this);
-            case MAP_SELECT -> new MapSelectScene(this); // <-- NEW
+            case MAP_SELECT -> new MapSelectScene(this);
+            case GARAGE -> new GarageScene(this);
+            case SHOP -> new ShopScene(this);
             case RACE -> new RaceScene(this);
-
-            // các màn làm sau
-            case LOGIN, GARAGE, SHOP, RESULT -> new MenuScene(this);
+            case LOGIN, RESULT -> new MenuScene(this);
         };
+    }
+
+    public void startRace(MapId mapId) {
+        this.selectedMap = mapId;
+        switchState(GameState.RACE);
+    }
+
+    public void goToMenu() {
+        switchState(GameState.MENU);
+    }
+
+    public void goTo(GameState gameState) {
+        switchState(gameState);
+    }
+
+    public void saveProgress() {
+        String username = UserSession.getUsername();
+        if (username == null || username.isBlank()) {
+            return;
+        }
+
+        PlayerDAO playerDAO = new PlayerDAO();
+        playerDAO.savePlayerProgress(
+                username,
+                playerProfile.getCoins(),
+                garageService.getOwnedCarIds(),
+                playerProfile.getEquippedCarId()
+        );
     }
 
     public GameState getState() {
@@ -57,12 +126,23 @@ public class Game {
         return stage;
     }
 
-    // ===== NEW getters/setters =====
     public MapId getSelectedMap() {
         return selectedMap;
     }
 
     public void setSelectedMap(MapId selectedMap) {
         this.selectedMap = selectedMap;
+    }
+
+    public PlayerProfile getPlayerProfile() {
+        return playerProfile;
+    }
+
+    public GarageService getGarageService() {
+        return garageService;
+    }
+
+    public ShopService getShopService() {
+        return shopService;
     }
 }
