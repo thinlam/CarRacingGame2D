@@ -26,14 +26,12 @@ public class MainApp extends Application {
             stage.setResizable(true);
             stage.setMinWidth(1100);
             stage.setMinHeight(720);
-            stage.centerOnScreen();
 
             stage.setOnCloseRequest(event -> {
                 Platform.exit();
                 System.exit(0);
             });
 
-            // Mở app là vào đăng nhập trước
             stage.setScene(LoginScene.create(stage, () -> {
                 Game game = new Game(stage);
                 game.start();

@@ -157,6 +157,12 @@ public class ShopScene implements AppScene {
     """);
 
         Node carView = CarViewFactory.createShopPreview(car.getId());
+
+        // thu nhỏ xe trong khung
+        carView.setScaleX(0.6);
+        carView.setScaleY(0.6);
+
+        StackPane.setAlignment(carView, Pos.CENTER);
         previewBox.getChildren().add(carView);
 
         return previewBox;
@@ -218,7 +224,7 @@ public class ShopScene implements AppScene {
         return switch (carId) {
             case RED_RACER -> Color.web("#ef4444");
             case BLUE_STORM -> Color.web("#2563eb");
-            case BLACK_SHADOW -> Color.web("#111827");
+            case GREEN_SHADOW -> Color.web("#111827");
             default -> Color.web("#9ca3af");
         };
     }
@@ -227,7 +233,7 @@ public class ShopScene implements AppScene {
         return switch (carId) {
             case RED_RACER -> Color.web("#facc15");
             case BLUE_STORM -> Color.web("#93c5fd");
-            case BLACK_SHADOW -> Color.web("#a78bfa");
+            case GREEN_SHADOW -> Color.web("#a78bfa");
             default -> Color.web("#e5e7eb");
         };
     }

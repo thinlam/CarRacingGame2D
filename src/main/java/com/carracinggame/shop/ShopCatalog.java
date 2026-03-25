@@ -29,7 +29,7 @@ public final class ShopCatalog {
                     new CarStats(455, 270, 300)
             ),
             new CarDefinition(
-                    CarId.BLACK_SHADOW,
+                    CarId.GREEN_SHADOW,
                     "Black Shadow",
                     1750,
                     "/images/cars/black_car.png",

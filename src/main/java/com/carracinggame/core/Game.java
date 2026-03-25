@@ -51,14 +51,12 @@ public class Game {
     }
 
     public void start() {
-        stage.setWidth(GameConfig.WIDTH);
-        stage.setHeight(GameConfig.HEIGHT);
         stage.setMinWidth(GameConfig.MIN_WIDTH);
         stage.setMinHeight(GameConfig.MIN_HEIGHT);
         stage.setResizable(true);
-        stage.centerOnScreen();
 
         switchState(GameState.MENU);
+        stage.setMaximized(true);
         stage.show();
     }
 
@@ -75,6 +73,8 @@ public class Game {
         this.currentScene = createSceneByState(newState);
 
         stage.setScene(currentScene.getScene());
+        stage.setMaximized(true);
+
         currentScene.onShow();
         currentScene.requestFocus();
     }

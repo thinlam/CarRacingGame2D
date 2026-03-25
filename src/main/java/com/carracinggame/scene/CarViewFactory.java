@@ -1,138 +1,158 @@
 package com.carracinggame.scene;
 
 import com.carracinggame.car.CarId;
-import javafx.scene.Group;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.layout.Pane;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.Rectangle;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelReader;
+import javafx.scene.image.WritableImage;
+import javafx.scene.layout.StackPane;
+
+import java.io.InputStream;
+import java.util.List;
+import java.util.Random;
 
 public final class CarViewFactory {
 
-    private static final double RAW_W = 48;
-    private static final double RAW_H = 86;
+    private static final Random RANDOM = new Random();
 
-    private CarViewFactory() {
-    }
+    // Bộ ảnh riêng cho xe AI
+    private static final List<String> AI_CAR_PATHS = List.of(
+            "/images/cars/ai/truck.png",
+            "/images/cars/ai/taxi.png",
+            "/images/cars/ai/Ambulance.png",
+            "/images/cars/ai/Mini_van.png",
+            "/images/cars/ai/Mini_truck.png"
+    );
 
+    private CarViewFactory() {}
+
+    // ================= SHOP =================
     public static Node createShopPreview(CarId carId) {
-        return createPreview(carId, 140, 95, 1.15, 0);
+        return createCar(carId, 95, 140);
     }
 
+    // ================= LOBBY =================
     public static Node createLobbyPreview(CarId carId) {
-        return createPreview(carId, 240, 250, 2.35, 18);
+        return createCar(carId, 120, 180);
     }
 
+    // ================= RACE =================
     public static Node createRaceCar(CarId carId) {
-        Group car = buildTopViewCar(carId);
-        car.setRotate(180); // đầu xe hướng lên trên khi đua
-        return car;
+        return createCar(carId, 50, 80);
     }
 
-    private static Node createPreview(CarId carId,
-                                      double boxW,
-                                      double boxH,
-                                      double scale,
-                                      double yOffset) {
-        Pane wrapper = new Pane();
-        wrapper.setPrefSize(boxW, boxH);
-        wrapper.setMinSize(boxW, boxH);
-        wrapper.setMaxSize(boxW, boxH);
+    public static Node createPlayerRaceCar(CarId carId) {
+        return createCar(carId, 50, 80);
+    }
 
-        Group car = buildTopViewCar(carId);
-        car.setScaleX(scale);
-        car.setScaleY(scale);
+    // Xe AI dùng ảnh PNG riêng
+    public static Node createObstacleRaceCar(CarId carId) {
+        String aiPath = AI_CAR_PATHS.get(RANDOM.nextInt(AI_CAR_PATHS.size()));
+        Node node = createCarFromPath(aiPath, 50, 80);
+        node.setRotate(180); // xe AI quay ngược
+        return node;
+    }
 
-        double scaledW = RAW_W * scale;
-        double scaledH = RAW_H * scale;
+    // ================= CORE =================
+    private static Node createCar(CarId carId, double w, double h) {
+        String path = getImagePath(carId);
+        return createCarFromPath(path, w, h);
+    }
 
-        double x = (boxW - scaledW) / 2.0;
-        double y = (boxH - scaledH) / 2.0 + yOffset;
+    private static Node createCarFromPath(String path, double w, double h) {
+        try (InputStream is = CarViewFactory.class.getResourceAsStream(path)) {
 
-        if (y < 0) {
-            y = 0;
+            if (is == null) {
+                System.out.println("Không tìm thấy ảnh: " + path);
+                return createFallback(w, h);
+            }
+
+            Image rawImage = new Image(is);
+            Image trimmedImage = trimTransparentEdges(rawImage);
+
+            ImageView iv = new ImageView(trimmedImage);
+            iv.setFitWidth(w);
+            iv.setFitHeight(h);
+            iv.setPreserveRatio(true);
+            iv.setSmooth(true);
+
+            StackPane box = new StackPane(iv);
+            box.setAlignment(Pos.CENTER);
+            box.setPrefSize(w, h);
+            box.setMinSize(w, h);
+            box.setMaxSize(w, h);
+
+            return box;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return createFallback(w, h);
+        }
+    }
+
+    private static StackPane createFallback(double w, double h) {
+        StackPane fallback = new StackPane();
+        fallback.setAlignment(Pos.CENTER);
+        fallback.setPrefSize(w, h);
+        fallback.setMinSize(w, h);
+        fallback.setMaxSize(w, h);
+        return fallback;
+    }
+
+    /**
+     * Cắt phần viền trong suốt xung quanh ảnh
+     * để các xe nhìn đồng đều kích thước hơn.
+     */
+    private static Image trimTransparentEdges(Image image) {
+        PixelReader reader = image.getPixelReader();
+        if (reader == null) {
+            return image;
         }
 
-        car.setLayoutX(x);
-        car.setLayoutY(y);
+        int width = (int) image.getWidth();
+        int height = (int) image.getHeight();
 
-        wrapper.getChildren().add(car);
-        return wrapper;
-    }
+        int minX = width;
+        int minY = height;
+        int maxX = -1;
+        int maxY = -1;
 
-    private static Group buildTopViewCar(CarId carId) {
-        Group sprite = new Group();
+        int alphaThreshold = 10;
 
-        Color bodyColor = getBodyColor(carId);
-        Color centerColor = getCenterColor(carId);
-        Color wingColor = bodyColor.darker();
-        Color tireColor = Color.web("#2f3138");
-        Color whiteColor = Color.web("#f8fafc");
-        Color noseLight = Color.web("#fde68a");
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int argb = reader.getArgb(x, y);
+                int alpha = (argb >> 24) & 0xff;
 
-        Rectangle rearWing = rect(16, 4, wingColor, 16, 2, 3, 3);
-        Rectangle rearBody = rect(12, 8, bodyColor, 18, 7, 4, 4);
-        Rectangle body = rect(18, 38, bodyColor, 15, 15, 6, 6);
-        Rectangle cockpit = rect(10, 18, centerColor, 19, 24, 4, 4);
-        Rectangle nose = rect(10, 10, whiteColor, 19, 54, 4, 4);
-        Rectangle frontWing = rect(18, 4, whiteColor, 15, 67, 3, 3);
-
-        Rectangle tireLT = rect(4, 10, tireColor, 11, 18, 2, 2);
-        Rectangle tireRT = rect(4, 10, tireColor, 33, 18, 2, 2);
-        Rectangle tireLB = rect(4, 10, tireColor, 11, 46, 2, 2);
-        Rectangle tireRB = rect(4, 10, tireColor, 33, 46, 2, 2);
-
-        Rectangle sideLeftTop = rect(3, 8, wingColor, 13, 28, 2, 2);
-        Rectangle sideRightTop = rect(3, 8, wingColor, 32, 28, 2, 2);
-        Rectangle sideLeftBottom = rect(3, 8, wingColor, 13, 40, 2, 2);
-        Rectangle sideRightBottom = rect(3, 8, wingColor, 32, 40, 2, 2);
-
-        Rectangle rearLight = rect(8, 3, whiteColor, 20, 10, 2, 2);
-        Rectangle frontLight = rect(8, 3, noseLight, 20, 61, 2, 2);
-
-        sprite.getChildren().addAll(
-                rearWing, rearBody, body, cockpit, nose, frontWing,
-                tireLT, tireRT, tireLB, tireRB,
-                sideLeftTop, sideRightTop, sideLeftBottom, sideRightBottom,
-                rearLight, frontLight
-        );
-
-        return sprite;
-    }
-
-    private static Rectangle rect(double w, double h, Color color,
-                                  double x, double y, double arcW, double arcH) {
-        Rectangle r = new Rectangle(w, h, color);
-        r.setX(x);
-        r.setY(y);
-        r.setArcWidth(arcW);
-        r.setArcHeight(arcH);
-        return r;
-    }
-
-    private static Color getBodyColor(CarId carId) {
-        if (carId == null) {
-            return Color.web("#9ca3af");
+                if (alpha > alphaThreshold) {
+                    if (x < minX) minX = x;
+                    if (y < minY) minY = y;
+                    if (x > maxX) maxX = x;
+                    if (y > maxY) maxY = y;
+                }
+            }
         }
 
+        if (maxX < minX || maxY < minY) {
+            return image;
+        }
+
+        int croppedWidth = maxX - minX + 1;
+        int croppedHeight = maxY - minY + 1;
+
+        return new WritableImage(reader, minX, minY, croppedWidth, croppedHeight);
+    }
+
+    // ================= PLAYER CAR PNG =================
+    private static String getImagePath(CarId carId) {
         return switch (carId) {
-            case RED_RACER -> Color.web("#ef4444");
-            case BLUE_STORM -> Color.web("#2563eb");
-            case BLACK_SHADOW -> Color.web("#111827");
-            default -> Color.web("#9ca3af");
-        };
-    }
-
-    private static Color getCenterColor(CarId carId) {
-        if (carId == null) {
-            return Color.web("#e5e7eb");
-        }
-
-        return switch (carId) {
-            case RED_RACER -> Color.web("#facc15");
-            case BLUE_STORM -> Color.web("#93c5fd");
-            case BLACK_SHADOW -> Color.web("#a78bfa");
-            default -> Color.web("#e5e7eb");
+            case RED_RACER -> "/images/cars/red_racer.png";
+            case BLUE_STORM -> "/images/cars/blue_storm.png";
+            case GREEN_SHADOW -> "/images/cars/green_shadow.png";
+            case YELLOW_FLASH -> "/images/cars/yellow_flash.png";
+            default -> "/images/cars/red_racer.png";
         };
     }
 }
