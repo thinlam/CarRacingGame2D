@@ -3,7 +3,7 @@ package com.carracinggame.car;
 public enum CarId {
     RED_RACER("Red Racer"),
     BLUE_STORM("Blue Storm"),
-    BLACK_SHADOW("Black Shadow"),
+    GREEN_SHADOW("Green Shadow"),
     YELLOW_FLASH("Yellow Flash");
 
     private final String displayName;

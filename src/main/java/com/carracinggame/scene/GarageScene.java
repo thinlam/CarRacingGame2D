@@ -131,13 +131,18 @@ public class GarageScene implements AppScene {
         previewBox.setMinSize(190, 110);
         previewBox.setMaxSize(190, 110);
         previewBox.setStyle("""
-            -fx-background-color: rgba(255,255,255,0.05);
-            -fx-background-radius: 18;
-            -fx-border-color: rgba(255,255,255,0.10);
-            -fx-border-radius: 18;
-        """);
+        -fx-background-color: rgba(255,255,255,0.05);
+        -fx-background-radius: 18;
+        -fx-border-color: rgba(255,255,255,0.10);
+        -fx-border-radius: 18;
+    """);
 
         Node carView = CarViewFactory.createShopPreview(carId);
+
+        // thu nhỏ xe để nằm gọn trong khung
+        carView.setScaleX(0.6);
+        carView.setScaleY(0.6);
+
         previewBox.getChildren().add(carView);
 
         return previewBox;

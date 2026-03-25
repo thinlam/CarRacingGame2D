@@ -22,6 +22,7 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -34,20 +35,31 @@ public class RaceScene implements AppScene {
 
     private static final double ROAD_W = 300;
     private static final double ROAD_X = (VIEW_W - ROAD_W) / 2.0;
+    private static final int LANE_COUNT = 4;
 
     private static final double PLAYER_Y = 620;
     private static final double TRACK_LENGTH = 7000;
 
-    // START nằm phía trước đầu xe
     private static final double LINE_SCREEN_OFFSET = 95;
     private static final double START_LINE_DISTANCE = 0;
     private static final double FINISH_LINE_DISTANCE = TRACK_LENGTH;
 
-    // GIẢM KÍCH THƯỚC XE
     private static final double PLAYER_ACTOR_W = 64;
     private static final double PLAYER_ACTOR_H = 98;
     private static final double AI_ACTOR_W = 64;
     private static final double AI_ACTOR_H = 98;
+
+    private static final double AI_MIN_GAP = 130;
+    private static final double AI_RESPAWN_BASE_Y = -180;
+    private static final double AI_RESPAWN_EXTRA_RANDOM = 120;
+    private static final double AI_DESPAWN_Y = VIEW_H + 140;
+
+    private static final int MAX_HITS = 2;
+    private static final double PLAYER_INVULNERABLE_TIME = 1.25;
+    private static final double SAFE_RESPAWN_Y_GAP = 140;
+
+    private static final String DEFAULT_TIP_TEXT =
+            "↑/W tăng tốc   •   ↓/S phanh   •   ← → / A D để né xe";
 
     private final Game game;
     private final Scene scene;
@@ -59,6 +71,7 @@ public class RaceScene implements AppScene {
     private final Label speedLabel;
     private final Label distanceLabel;
     private final Label mapLabel;
+    private final Label crashLabel;
     private final Label tipLabel;
     private final Label countdownLabel;
 
@@ -82,6 +95,9 @@ public class RaceScene implements AppScene {
     private double countdownTime = 4.0;
     private boolean raceStarted = false;
 
+    private int hitCount = 0;
+    private double invulnerableTime = 0;
+
     public RaceScene(Game game) {
         this.game = game;
 
@@ -101,7 +117,8 @@ public class RaceScene implements AppScene {
         this.speedLabel = new Label();
         this.distanceLabel = new Label();
         this.mapLabel = new Label();
-        this.tipLabel = new Label("↑/W tăng tốc   •   ↓/S phanh   •   ← → / A D để né xe");
+        this.crashLabel = new Label();
+        this.tipLabel = new Label(DEFAULT_TIP_TEXT);
 
         this.countdownLabel = new Label("3");
         this.countdownLabel.setStyle("""
@@ -112,6 +129,7 @@ public class RaceScene implements AppScene {
         """);
 
         this.playerActor = createPlayerActor(getEquippedCarId(), 1.35, PLAYER_ACTOR_W, PLAYER_ACTOR_H);
+
         BorderPane root = new BorderPane();
         root.setStyle("""
             -fx-background-color:
@@ -191,6 +209,11 @@ public class RaceScene implements AppScene {
         roadScroll = 0;
         playerX = laneCenter(1);
 
+        hitCount = 0;
+        invulnerableTime = 0;
+        playerActor.setOpacity(1.0);
+        tipLabel.setText(DEFAULT_TIP_TEXT);
+
         pressedKeys.clear();
         initActors();
         updateHud();
@@ -231,6 +254,12 @@ public class RaceScene implements AppScene {
             -fx-text-fill: #123b62;
         """);
 
+        crashLabel.setStyle("""
+            -fx-font-size: 14px;
+            -fx-font-weight: 900;
+            -fx-text-fill: #b22222;
+        """);
+
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
@@ -248,7 +277,7 @@ public class RaceScene implements AppScene {
             tryGoMenu();
         });
 
-        top.getChildren().addAll(title, speedLabel, distanceLabel, mapLabel, spacer, backBtn);
+        top.getChildren().addAll(title, speedLabel, distanceLabel, mapLabel, crashLabel, spacer, backBtn);
         return top;
     }
 
@@ -297,34 +326,47 @@ public class RaceScene implements AppScene {
 
     private void initActors() {
         actorLayer.getChildren().clear();
-        actorLayer.getChildren().add(playerActor);
-
         aiCars.clear();
 
-        aiCars.add(new AiCar(randomAiCarId(), laneCenter(0), VIEW_H + 220, 190));
-        aiCars.add(new AiCar(randomAiCarId(), laneCenter(1), VIEW_H + 320, 205));
-        aiCars.add(new AiCar(randomAiCarId(), laneCenter(2), VIEW_H + 420, 180));
-        aiCars.add(new AiCar(randomAiCarId(), laneCenter(3), VIEW_H + 520, 210));
-        aiCars.add(new AiCar(randomAiCarId(), laneCenter(0), VIEW_H + 620, 195));
-        aiCars.add(new AiCar(randomAiCarId(), laneCenter(2), VIEW_H + 720, 185));
+        actorLayer.getChildren().add(playerActor);
+        playerActor.toBack();
 
-        for (AiCar aiCar : aiCars) {
+        for (int i = 0; i < 6; i++) {
+            AiCar aiCar = new AiCar(
+                    randomAiCarId(),
+                    laneCenter(i % LANE_COUNT),
+                    VIEW_H + 220 + i * 110,
+                    180 + random.nextInt(40)
+            );
             aiCar.actor.setVisible(false);
+            aiCars.add(aiCar);
             actorLayer.getChildren().add(aiCar.actor);
+            aiCar.actor.toFront();
         }
     }
 
     private void releaseAiCars() {
-        double[] startYs = {-120, -240, -360, -480, -600, -720};
+        List<Integer> laneOrder = new ArrayList<>(List.of(0, 1, 2, 3));
+        Collections.shuffle(laneOrder, random);
 
         for (int i = 0; i < aiCars.size(); i++) {
+            if (i > 0 && i % laneOrder.size() == 0) {
+                Collections.shuffle(laneOrder, random);
+            }
+
             AiCar aiCar = aiCars.get(i);
-            aiCar.screenY = startYs[i % startYs.length];
-            aiCar.x = laneCenter(random.nextInt(4));
+            int lane = laneOrder.get(i % laneOrder.size());
+
+            aiCar.lane = lane;
+            aiCar.x = laneCenter(lane);
+            aiCar.screenY = -140 - i * (AI_MIN_GAP + 30);
             aiCar.speed = 160 + random.nextInt(110);
             aiCar.actor.setVisible(true);
             aiCar.resetCar(randomAiCarId());
+            aiCar.actor.toFront();
         }
+
+        playerActor.toBack();
     }
 
     private void initTimer() {
@@ -357,8 +399,10 @@ public class RaceScene implements AppScene {
             updatePlayerInput(dt);
             updatePlayerState(dt);
             updateAiCars(dt);
+            updateInvulnerability(dt);
         } else {
             playerSpeed = 0;
+            updateInvulnerability(dt);
         }
 
         updateHud();
@@ -391,6 +435,22 @@ public class RaceScene implements AppScene {
                 raceStarted = true;
                 releaseAiCars();
             }
+        }
+    }
+
+    private void updateInvulnerability(double dt) {
+        if (invulnerableTime > 0) {
+            invulnerableTime -= dt;
+
+            if (invulnerableTime > 0) {
+                boolean blink = ((int) (invulnerableTime * 10)) % 2 == 0;
+                playerActor.setOpacity(blink ? 0.42 : 1.0);
+            } else {
+                invulnerableTime = 0;
+                playerActor.setOpacity(1.0);
+            }
+        } else {
+            playerActor.setOpacity(1.0);
         }
     }
 
@@ -430,25 +490,210 @@ public class RaceScene implements AppScene {
     }
 
     private void updateAiCars(double dt) {
-        for (AiCar aiCar : aiCars) {
-            aiCar.screenY += (aiCar.speed + playerSpeed * 0.35) * dt;
+        for (int lane = 0; lane < LANE_COUNT; lane++) {
+            List<AiCar> laneCars = new ArrayList<>();
 
-            if (aiCar.screenY > VIEW_H + 140) {
-                aiCar.screenY = -160 - random.nextInt(320);
-                aiCar.x = laneCenter(random.nextInt(4));
-                aiCar.speed = 160 + random.nextInt(110);
-                aiCar.resetCar(randomAiCarId());
+            for (AiCar aiCar : aiCars) {
+                if (aiCar.lane == lane) {
+                    laneCars.add(aiCar);
+                }
             }
 
+            laneCars.sort((a, b) -> Double.compare(a.screenY, b.screenY));
+
+            for (int i = 0; i < laneCars.size(); i++) {
+                AiCar aiCar = laneCars.get(i);
+
+                double nextY = aiCar.screenY + (aiCar.speed + playerSpeed * 0.35) * dt;
+
+                if (i < laneCars.size() - 1) {
+                    AiCar frontCar = laneCars.get(i + 1);
+                    double maxAllowedY = frontCar.screenY - AI_MIN_GAP;
+
+                    if (nextY > maxAllowedY) {
+                        nextY = maxAllowedY;
+                    }
+                }
+
+                aiCar.screenY = nextY;
+            }
+        }
+
+        for (AiCar aiCar : aiCars) {
+            if (aiCar.screenY > AI_DESPAWN_Y) {
+                respawnAiCar(aiCar);
+            }
+        }
+
+        if (invulnerableTime > 0) {
+            return;
+        }
+
+        for (AiCar aiCar : aiCars) {
             boolean collideX = Math.abs(aiCar.x - playerX) < 34;
             boolean collideY = Math.abs(aiCar.screenY - PLAYER_Y) < 48;
 
             if (collideX && collideY) {
-                playerSpeed *= 0.78;
-                playerX += aiCar.x >= playerX ? -24 : 24;
-                playerX = clamp(playerX, ROAD_X + 30, ROAD_X + ROAD_W - 30);
+                handlePlayerCollision(aiCar);
+                break;
             }
         }
+    }
+
+    private void handlePlayerCollision(AiCar hitCar) {
+        hitCount++;
+
+        if (hitCount >= MAX_HITS) {
+            gameOver();
+            return;
+        }
+
+        removeHitObstacle(hitCar);
+
+        playerSpeed = 0;
+        playerX = laneCenter(findBestSafeLane());
+        invulnerableTime = PLAYER_INVULNERABLE_TIME;
+
+        playerActor.toBack();
+        for (AiCar aiCar : aiCars) {
+            aiCar.actor.toFront();
+        }
+
+        tipLabel.setText("Bạn đã va chạm 1 lần! Va chạm thêm 1 lần nữa sẽ GAME OVER.");
+    }
+
+    private void removeHitObstacle(AiCar hitCar) {
+        hitCar.actor.setVisible(false);
+        respawnAiCar(hitCar);
+    }
+
+    private int findBestSafeLane() {
+        int currentLane = nearestLane(playerX);
+        double currentSafety = laneSafetyScore(currentLane);
+
+        if (currentSafety >= SAFE_RESPAWN_Y_GAP) {
+            return currentLane;
+        }
+
+        int bestLane = currentLane;
+        double bestSafety = currentSafety;
+
+        for (int lane = 0; lane < LANE_COUNT; lane++) {
+            double safety = laneSafetyScore(lane);
+            if (safety > bestSafety) {
+                bestSafety = safety;
+                bestLane = lane;
+            }
+        }
+
+        return bestLane;
+    }
+
+    private double laneSafetyScore(int lane) {
+        double minGap = Double.MAX_VALUE;
+
+        for (AiCar aiCar : aiCars) {
+            if (aiCar.lane != lane) {
+                continue;
+            }
+
+            double gap = Math.abs(aiCar.screenY - PLAYER_Y);
+            if (gap < minGap) {
+                minGap = gap;
+            }
+        }
+
+        return minGap == Double.MAX_VALUE ? 99999 : minGap;
+    }
+
+    private int nearestLane(double x) {
+        int bestLane = 0;
+        double bestDistance = Double.MAX_VALUE;
+
+        for (int lane = 0; lane < LANE_COUNT; lane++) {
+            double dist = Math.abs(laneCenter(lane) - x);
+            if (dist < bestDistance) {
+                bestDistance = dist;
+                bestLane = lane;
+            }
+        }
+
+        return bestLane;
+    }
+
+    private void gameOver() {
+        if (finished || finishDialogShown) {
+            return;
+        }
+
+        finished = true;
+        finishDialogShown = true;
+
+        if (timer != null) {
+            timer.stop();
+        }
+
+        playerSpeed = 0;
+        playerActor.setOpacity(1.0);
+
+        Platform.runLater(() -> {
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("Game Over");
+            alert.setHeaderText("Bạn đã va chạm 2 lần!");
+            alert.setContentText("Game Over. Hãy thử lại nhé!");
+            alert.showAndWait();
+            tryGoMenu();
+        });
+    }
+
+    private void respawnAiCar(AiCar aiCar) {
+        int bestLane = 0;
+        double bestSpawnY = -99999;
+
+        for (int lane = 0; lane < LANE_COUNT; lane++) {
+            double candidateY = computeSpawnYForLane(aiCar, lane);
+
+            if (candidateY > bestSpawnY) {
+                bestSpawnY = candidateY;
+                bestLane = lane;
+            } else if (Math.abs(candidateY - bestSpawnY) < 0.001 && random.nextBoolean()) {
+                bestSpawnY = candidateY;
+                bestLane = lane;
+            }
+        }
+
+        aiCar.lane = bestLane;
+        aiCar.x = laneCenter(bestLane);
+        aiCar.screenY = bestSpawnY;
+        aiCar.speed = 160 + random.nextInt(110);
+        aiCar.resetCar(randomAiCarId());
+        aiCar.actor.setVisible(true);
+        aiCar.actor.toFront();
+    }
+
+    private double computeSpawnYForLane(AiCar self, int lane) {
+        double topMostY = Double.POSITIVE_INFINITY;
+
+        for (AiCar other : aiCars) {
+            if (other == self) {
+                continue;
+            }
+            if (other.lane != lane) {
+                continue;
+            }
+            if (other.screenY < topMostY) {
+                topMostY = other.screenY;
+            }
+        }
+
+        double baseSpawn = AI_RESPAWN_BASE_Y - random.nextInt((int) AI_RESPAWN_EXTRA_RANDOM);
+
+        if (topMostY == Double.POSITIVE_INFINITY) {
+            return baseSpawn;
+        }
+
+        double safeSpawn = topMostY - AI_MIN_GAP - random.nextInt(35);
+        return Math.min(baseSpawn, safeSpawn);
     }
 
     private void redraw() {
@@ -478,8 +723,8 @@ public class RaceScene implements AppScene {
         gc.strokeLine(ROAD_X + 4, 0, ROAD_X + 4, VIEW_H);
         gc.strokeLine(ROAD_X + ROAD_W - 4, 0, ROAD_X + ROAD_W - 4, VIEW_H);
 
-        double laneW = ROAD_W / 4.0;
-        for (int i = 1; i < 4; i++) {
+        double laneW = ROAD_W / (double) LANE_COUNT;
+        for (int i = 1; i < LANE_COUNT; i++) {
             double x = ROAD_X + laneW * i;
             drawDashedVertical(gc, x, roadScroll * 1.2, 38, 26);
         }
@@ -567,14 +812,15 @@ public class RaceScene implements AppScene {
 
     private void positionActors() {
         setActorPosition(playerActor, playerX, PLAYER_Y, PLAYER_ACTOR_W, PLAYER_ACTOR_H, 1.0);
-        playerActor.toFront();
+        playerActor.toBack();
 
         for (AiCar aiCar : aiCars) {
-            boolean visible = raceStarted && aiCar.screenY > -140 && aiCar.screenY < VIEW_H + 90;
+            boolean visible = raceStarted && aiCar.screenY > -160 && aiCar.screenY < VIEW_H + 110;
             aiCar.actor.setVisible(visible);
 
             if (visible) {
                 setActorPosition(aiCar.actor, aiCar.x, aiCar.screenY, AI_ACTOR_W, AI_ACTOR_H, 1.0);
+                aiCar.actor.toFront();
             }
         }
     }
@@ -630,6 +876,7 @@ public class RaceScene implements AppScene {
         speedLabel.setText("Tốc độ: " + (int) playerSpeed + " km/h");
         distanceLabel.setText("Quãng đường: " + (int) playerDistance + " / " + (int) TRACK_LENGTH);
         mapLabel.setText("Map: " + mapDisplayName());
+        crashLabel.setText("Va chạm: " + hitCount + " / " + MAX_HITS);
     }
 
     private void finishRace() {
@@ -691,7 +938,7 @@ public class RaceScene implements AppScene {
     }
 
     private double laneCenter(int lane) {
-        double laneW = ROAD_W / 4.0;
+        double laneW = ROAD_W / (double) LANE_COUNT;
         return ROAD_X + laneW * lane + laneW / 2.0;
     }
 
@@ -745,7 +992,7 @@ public class RaceScene implements AppScene {
         CarId[] ids = {
                 CarId.RED_RACER,
                 CarId.BLUE_STORM,
-                CarId.BLACK_SHADOW
+                CarId.GREEN_SHADOW
         };
         return ids[random.nextInt(ids.length)];
     }
@@ -768,12 +1015,14 @@ public class RaceScene implements AppScene {
     }
 
     private final class AiCar {
+        private int lane;
         private double x;
         private double screenY;
         private double speed;
         private final StackPane actor;
 
         private AiCar(CarId carId, double x, double screenY, double speed) {
+            this.lane = 0;
             this.x = x;
             this.screenY = screenY;
             this.speed = speed;
@@ -786,6 +1035,7 @@ public class RaceScene implements AppScene {
             carNode.setScaleX(1.3);
             carNode.setScaleY(1.3);
             actor.getChildren().add(carNode);
+            actor.toFront();
         }
     }
 }
