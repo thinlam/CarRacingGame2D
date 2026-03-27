@@ -5,6 +5,7 @@ public enum GameState {
     MENU,
     MAP_SELECT,
     GARAGE,
+    UPGRADE,
     SHOP,
     RACE,
     RESULT;
