@@ -23,6 +23,8 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
+import java.lang.reflect.Method;
+
 public class GarageScene implements AppScene {
 
     private final Game game;
@@ -40,7 +42,7 @@ public class GarageScene implements AppScene {
         title.setFont(Font.font("Arial", FontWeight.EXTRA_BOLD, 32));
         title.setTextFill(Color.WHITE);
 
-        messageLabel = new Label("Chọn xe đang dùng cho Race.");
+        messageLabel = new Label("Chọn xe đang dùng cho Race hoặc vào trang nâng cấp xe.");
         messageLabel.setTextFill(Color.web("#dbeafe"));
         messageLabel.setFont(Font.font(16));
 
@@ -60,6 +62,7 @@ public class GarageScene implements AppScene {
         backButton.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         backButton.setTextFill(Color.WHITE);
         backButton.setStyle("-fx-background-color: #1f2937; -fx-background-radius: 14;");
+        backButton.setPrefHeight(42);
 
         HBox bottomBox = new HBox(backButton);
         bottomBox.setAlignment(Pos.CENTER_LEFT);
@@ -79,11 +82,16 @@ public class GarageScene implements AppScene {
     private void refresh() {
         listContainer.getChildren().clear();
 
+        String username = resolveUsername();
+
         for (CarDefinition car : garageService.getOwnedCarDefinitions()) {
             boolean equipped = garageService.getEquippedCar() != null
                     && garageService.getEquippedCar().getId() == car.getId();
 
-            Node preview = createCarPreview(car.getId());
+            UpgradeScene.UpgradeData upgradeData =
+                    UpgradeScene.getUpgradeData(username, car.getId());
+
+            Node preview = createCarPreview(car.getId(), upgradeData);
 
             Label name = new Label(car.getName());
             name.setTextFill(Color.WHITE);
@@ -96,12 +104,31 @@ public class GarageScene implements AppScene {
             status.setTextFill(equipped ? Color.web("#86efac") : Color.web("#cbd5e1"));
             status.setFont(Font.font("Arial", FontWeight.BOLD, 15));
 
-            VBox infoBox = new VBox(6, name, stats, status);
+            Label paintInfo = new Label("Màu sơn: " + upgradeData.getPaintName());
+            paintInfo.setTextFill(Color.web("#93c5fd"));
+            paintInfo.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 14));
+
+            Label decalInfo = new Label("Decal: " + upgradeData.getDecalName());
+            decalInfo.setTextFill(Color.web("#f9a8d4"));
+            decalInfo.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 14));
+
+            VBox infoBox = new VBox(6, name, stats, status, paintInfo, decalInfo);
+            infoBox.setAlignment(Pos.CENTER_LEFT);
+
+            Button upgradeButton = new Button("Nâng cấp xe");
+            upgradeButton.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+            upgradeButton.setTextFill(Color.WHITE);
+            upgradeButton.setMinWidth(150);
+            upgradeButton.setPrefHeight(42);
+            upgradeButton.setStyle("-fx-background-color: #2563eb; -fx-background-radius: 14;");
+            upgradeButton.setOnAction(event -> game.openUpgradeScene(car.getId()));
 
             Button actionButton = new Button(equipped ? "Đã chọn" : "Chọn xe");
             actionButton.setDisable(equipped);
             actionButton.setFont(Font.font("Arial", FontWeight.BOLD, 16));
             actionButton.setTextFill(Color.WHITE);
+            actionButton.setMinWidth(150);
+            actionButton.setPrefHeight(42);
             actionButton.setStyle(
                     "-fx-background-color: " + (equipped ? "#4b5563" : "#10b981") + "; -fx-background-radius: 14;"
             );
@@ -113,10 +140,13 @@ public class GarageScene implements AppScene {
                 refresh();
             });
 
+            VBox buttonBox = new VBox(10, upgradeButton, actionButton);
+            buttonBox.setAlignment(Pos.CENTER_RIGHT);
+
             Region spacer = new Region();
             HBox.setHgrow(spacer, Priority.ALWAYS);
 
-            HBox card = new HBox(18, preview, infoBox, spacer, actionButton);
+            HBox card = new HBox(18, preview, infoBox, spacer, buttonBox);
             card.setAlignment(Pos.CENTER_LEFT);
             card.setPadding(new Insets(18));
             card.setStyle("-fx-background-color: rgba(15,23,42,0.55); -fx-background-radius: 18;");
@@ -125,27 +155,48 @@ public class GarageScene implements AppScene {
         }
     }
 
-    private Node createCarPreview(CarId carId) {
+    private Node createCarPreview(CarId carId, UpgradeScene.UpgradeData upgradeData) {
         StackPane previewBox = new StackPane();
         previewBox.setPrefSize(190, 110);
         previewBox.setMinSize(190, 110);
         previewBox.setMaxSize(190, 110);
         previewBox.setStyle("""
-        -fx-background-color: rgba(255,255,255,0.05);
-        -fx-background-radius: 18;
-        -fx-border-color: rgba(255,255,255,0.10);
-        -fx-border-radius: 18;
-    """);
+            -fx-background-color: rgba(255,255,255,0.05);
+            -fx-background-radius: 18;
+            -fx-border-color: rgba(255,255,255,0.10);
+            -fx-border-radius: 18;
+        """);
 
         Node carView = CarViewFactory.createShopPreview(carId);
-
-        // thu nhỏ xe để nằm gọn trong khung
         carView.setScaleX(0.6);
         carView.setScaleY(0.6);
 
-        previewBox.getChildren().add(carView);
+        CarPaintUtil.applyPaint(carView, upgradeData.getPaintName());
 
+        previewBox.getChildren().add(carView);
         return previewBox;
+    }
+
+    private String resolveUsername() {
+        try {
+            Object profile = game.getPlayerProfile();
+            if (profile == null) return "guest";
+
+            for (String methodName : new String[]{"getUsername", "getName", "getPlayerName", "getDisplayName"}) {
+                try {
+                    Method method = profile.getClass().getMethod(methodName);
+                    Object value = method.invoke(profile);
+                    if (value != null && !String.valueOf(value).isBlank()) {
+                        return String.valueOf(value);
+                    }
+                } catch (NoSuchMethodException ignored) {
+                }
+            }
+
+            return "guest";
+        } catch (Exception e) {
+            return "guest";
+        }
     }
 
     @Override

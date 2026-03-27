@@ -13,7 +13,9 @@ import com.carracinggame.scene.RaceScene;
 import com.carracinggame.scene.ShopScene;
 import com.carracinggame.shop.ShopService;
 import javafx.stage.Stage;
-
+import com.carracinggame.car.CarDefinition;
+import com.carracinggame.car.CarId;
+import com.carracinggame.scene.UpgradeScene;
 public class Game {
 
     private final Stage stage;
@@ -21,7 +23,7 @@ public class Game {
     private GameState state;
     private AppScene currentScene;
     private MapId selectedMap = MapId.NORTH;
-
+    private CarId selectedUpgradeCarId;
     private final PlayerProfile playerProfile;
     private final GarageService garageService;
     private final ShopService shopService;
@@ -84,6 +86,7 @@ public class Game {
             case MENU -> new MenuScene(this);
             case MAP_SELECT -> new MapSelectScene(this);
             case GARAGE -> new GarageScene(this);
+            case UPGRADE -> currentScene = new UpgradeScene(this);
             case SHOP -> new ShopScene(this);
             case RACE -> new RaceScene(this);
             case LOGIN, RESULT -> new MenuScene(this);
@@ -117,7 +120,22 @@ public class Game {
                 playerProfile.getEquippedCarId()
         );
     }
+    public void openUpgradeScene(CarId carId) {
+        this.selectedUpgradeCarId = carId;
+        goTo(GameState.UPGRADE);
+    }
 
+    public CarDefinition getUpgradeCarDefinition() {
+        if (selectedUpgradeCarId == null) {
+            return garageService.getEquippedCar();
+        }
+
+        return garageService.getOwnedCarDefinitions()
+                .stream()
+                .filter(car -> car.getId() == selectedUpgradeCarId)
+                .findFirst()
+                .orElse(garageService.getEquippedCar());
+    }
     public GameState getState() {
         return state;
     }

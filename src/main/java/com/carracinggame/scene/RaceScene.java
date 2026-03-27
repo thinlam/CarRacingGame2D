@@ -38,11 +38,14 @@ public class RaceScene implements AppScene {
     private static final int LANE_COUNT = 4;
 
     private static final double PLAYER_Y = 620;
-    private static final double TRACK_LENGTH = 7000;
+
+    // Độ dài từng miền
+    private static final double NORTH_TRACK_LENGTH = 15000;
+    private static final double CENTRAL_TRACK_LENGTH = 18000;
+    private static final double SOUTH_TRACK_LENGTH = 20000;
 
     private static final double LINE_SCREEN_OFFSET = 95;
     private static final double START_LINE_DISTANCE = 0;
-    private static final double FINISH_LINE_DISTANCE = TRACK_LENGTH;
 
     private static final double PLAYER_ACTOR_W = 64;
     private static final double PLAYER_ACTOR_H = 98;
@@ -68,6 +71,7 @@ public class RaceScene implements AppScene {
     private final Pane actorLayer;
     private final Canvas miniMapCanvas;
 
+    private final Label titleLabel;
     private final Label speedLabel;
     private final Label distanceLabel;
     private final Label mapLabel;
@@ -87,6 +91,7 @@ public class RaceScene implements AppScene {
     private double playerSpeed = 0;
     private double playerDistance = 0;
     private double playerX = laneCenter(1);
+    private double currentTrackLength;
 
     private double roadScroll = 0;
     private boolean finished = false;
@@ -100,6 +105,7 @@ public class RaceScene implements AppScene {
 
     public RaceScene(Game game) {
         this.game = game;
+        this.currentTrackLength = resolveTrackLength();
 
         this.canvas = new Canvas(VIEW_W, VIEW_H);
 
@@ -114,6 +120,7 @@ public class RaceScene implements AppScene {
 
         this.miniMapCanvas = new Canvas(120, 160);
 
+        this.titleLabel = new Label("RACE - MAP " + mapDisplayName().toUpperCase());
         this.speedLabel = new Label();
         this.distanceLabel = new Label();
         this.mapLabel = new Label();
@@ -204,6 +211,9 @@ public class RaceScene implements AppScene {
         raceStarted = false;
         countdownTime = 4.0;
 
+        currentTrackLength = resolveTrackLength();
+        titleLabel.setText("RACE - MAP " + mapDisplayName().toUpperCase());
+
         playerSpeed = 0;
         playerDistance = 0;
         roadScroll = 0;
@@ -229,8 +239,7 @@ public class RaceScene implements AppScene {
             -fx-background-radius: 0 0 22 22;
         """);
 
-        Label title = new Label("RACE - MAP MIỀN BẮC");
-        title.setStyle("""
+        titleLabel.setStyle("""
             -fx-font-size: 22px;
             -fx-font-weight: 900;
             -fx-text-fill: #123b62;
@@ -277,7 +286,7 @@ public class RaceScene implements AppScene {
             tryGoMenu();
         });
 
-        top.getChildren().addAll(title, speedLabel, distanceLabel, mapLabel, crashLabel, spacer, backBtn);
+        top.getChildren().addAll(titleLabel, speedLabel, distanceLabel, mapLabel, crashLabel, spacer, backBtn);
         return top;
     }
 
@@ -407,8 +416,8 @@ public class RaceScene implements AppScene {
 
         updateHud();
 
-        if (playerDistance >= TRACK_LENGTH) {
-            playerDistance = TRACK_LENGTH;
+        if (playerDistance >= currentTrackLength) {
+            playerDistance = currentTrackLength;
             finishRace();
         }
     }
@@ -483,8 +492,8 @@ public class RaceScene implements AppScene {
 
     private void updatePlayerState(double dt) {
         playerDistance += playerSpeed * dt;
-        if (playerDistance > TRACK_LENGTH) {
-            playerDistance = TRACK_LENGTH;
+        if (playerDistance > currentTrackLength) {
+            playerDistance = currentTrackLength;
         }
         roadScroll += playerSpeed * dt;
     }
@@ -706,11 +715,33 @@ public class RaceScene implements AppScene {
         GraphicsContext gc = canvas.getGraphicsContext2D();
         gc.clearRect(0, 0, VIEW_W, VIEW_H);
 
-        gc.setFill(Color.web("#2e9d34"));
-        gc.fillRect(0, 0, VIEW_W, VIEW_H);
+        MapId mapId = getSafeMapId();
 
-        drawGrassPattern(gc, 0, 0, ROAD_X, VIEW_H);
-        drawGrassPattern(gc, ROAD_X + ROAD_W, 0, VIEW_W - (ROAD_X + ROAD_W), VIEW_H);
+        switch (mapId) {
+            case NORTH -> {
+                gc.setFill(Color.web("#9fd7ff"));
+                gc.fillRect(0, 0, VIEW_W, VIEW_H);
+                gc.setFill(Color.rgb(255, 255, 255, 0.20));
+                gc.fillRect(0, 0, ROAD_X, VIEW_H);
+                gc.fillRect(ROAD_X + ROAD_W, 0, VIEW_W - (ROAD_X + ROAD_W), VIEW_H);
+            }
+            case CENTRAL -> {
+                gc.setFill(Color.web("#ffd59e"));
+                gc.fillRect(0, 0, VIEW_W, VIEW_H);
+                gc.setFill(Color.rgb(255, 248, 220, 0.22));
+                gc.fillRect(0, 0, ROAD_X, VIEW_H);
+                gc.fillRect(ROAD_X + ROAD_W, 0, VIEW_W - (ROAD_X + ROAD_W), VIEW_H);
+            }
+            case SOUTH -> {
+                gc.setFill(Color.web("#8fe0b4"));
+                gc.fillRect(0, 0, VIEW_W, VIEW_H);
+                gc.setFill(Color.rgb(255, 255, 255, 0.16));
+                gc.fillRect(0, 0, ROAD_X, VIEW_H);
+                gc.fillRect(ROAD_X + ROAD_W, 0, VIEW_W - (ROAD_X + ROAD_W), VIEW_H);
+            }
+        }
+
+        drawRegionDecor(gc, mapId);
 
         drawRoadBarrier(gc, ROAD_X - 18, 0, 18, VIEW_H);
         drawRoadBarrier(gc, ROAD_X + ROAD_W, 0, 18, VIEW_H);
@@ -735,9 +766,87 @@ public class RaceScene implements AppScene {
         drawStartAndFinishLines(gc);
     }
 
+    private void drawRegionDecor(GraphicsContext gc, MapId mapId) {
+        switch (mapId) {
+            case NORTH -> drawNorthDecor(gc);
+            case CENTRAL -> drawCentralDecor(gc);
+            case SOUTH -> drawSouthDecor(gc);
+        }
+    }
+
+    private void drawNorthDecor(GraphicsContext gc) {
+        // Hồ / núi / sương
+        gc.setFill(Color.rgb(0, 80, 120, 0.30));
+        gc.fillRoundRect(20, 110, ROAD_X - 40, 220, 40, 40);
+
+        gc.setFill(Color.rgb(230, 230, 230, 0.85));
+        gc.fillRoundRect(78, 210, 56, 68, 10, 10);
+        gc.setFill(Color.rgb(120, 120, 120, 0.85));
+        gc.fillRect(78, 205, 56, 10);
+
+        gc.setFill(Color.rgb(80, 120, 90, 0.55));
+        gc.fillPolygon(
+                new double[]{30, 170, 310},
+                new double[]{520, 260, 520},
+                3
+        );
+        gc.fillPolygon(
+                new double[]{VIEW_W - 30, VIEW_W - 170, VIEW_W - 310},
+                new double[]{520, 260, 520},
+                3
+        );
+
+        gc.setFill(Color.rgb(255, 255, 255, 0.16));
+        gc.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
+
+    private void drawCentralDecor(GraphicsContext gc) {
+        // Nắng - biển - đồi cát
+        gc.setFill(Color.rgb(0, 110, 170, 0.28));
+        gc.fillRect(0, 0, ROAD_X, VIEW_H);
+        gc.fillRect(ROAD_X + ROAD_W, 0, VIEW_W - (ROAD_X + ROAD_W), VIEW_H);
+
+        gc.setFill(Color.rgb(255, 220, 140, 0.70));
+        gc.fillOval(25, 420, 150, 90);
+        gc.fillOval(VIEW_W - 170, 380, 145, 100);
+
+        gc.setFill(Color.rgb(200, 140, 70, 0.55));
+        gc.fillOval(70, 170, 80, 140);
+        gc.fillOval(VIEW_W - 150, 150, 82, 145);
+
+        gc.setFill(Color.rgb(255, 245, 210, 0.30));
+        gc.fillOval(55, 70, 50, 50);
+    }
+
+    private void drawSouthDecor(GraphicsContext gc) {
+        // Sông nước - cây dừa - đồng bằng
+        gc.setFill(Color.rgb(0, 120, 160, 0.25));
+        gc.fillRoundRect(18, 150, ROAD_X - 36, 160, 30, 30);
+        gc.fillRoundRect(ROAD_X + ROAD_W + 18, 220, VIEW_W - (ROAD_X + ROAD_W) - 36, 170, 30, 30);
+
+        gc.setStroke(Color.rgb(90, 55, 25, 0.85));
+        gc.setLineWidth(6);
+
+        gc.strokeLine(60, 520, 85, 420);
+        gc.setFill(Color.rgb(30, 150, 70, 0.85));
+        gc.fillOval(72, 388, 26, 54);
+        gc.fillOval(55, 395, 42, 18);
+        gc.fillOval(70, 400, 45, 16);
+
+        gc.strokeLine(VIEW_W - 60, 520, VIEW_W - 85, 420);
+        gc.setFill(Color.rgb(30, 150, 70, 0.85));
+        gc.fillOval(VIEW_W - 98, 388, 26, 54);
+        gc.fillOval(VIEW_W - 110, 395, 42, 18);
+        gc.fillOval(VIEW_W - 100, 400, 45, 16);
+
+        gc.setFill(Color.rgb(80, 170, 90, 0.35));
+        gc.fillOval(35, 95, 120, 70);
+        gc.fillOval(VIEW_W - 155, 110, 120, 70);
+    }
+
     private void drawStartAndFinishLines(GraphicsContext gc) {
         double startY = PLAYER_Y - LINE_SCREEN_OFFSET - (START_LINE_DISTANCE - playerDistance);
-        double finishY = PLAYER_Y + LINE_SCREEN_OFFSET - (FINISH_LINE_DISTANCE - playerDistance);
+        double finishY = PLAYER_Y + LINE_SCREEN_OFFSET - (currentTrackLength - playerDistance);
 
         drawCheckLine(gc, startY, Color.WHITE, Color.web("#d9d9d9"));
         drawCheckLine(gc, finishY, Color.WHITE, Color.BLACK);
@@ -767,24 +876,6 @@ public class RaceScene implements AppScene {
             double x = ROAD_X + i * blockW;
             gc.setFill(i % 2 == 0 ? colorA : colorB);
             gc.fillRect(x, y, blockW, lineH);
-        }
-    }
-
-    private void drawGrassPattern(GraphicsContext gc, double x, double y, double w, double h) {
-        gc.setFill(Color.web("#219c34"));
-        gc.fillRect(x, y, w, h);
-
-        for (int row = 0; row < 30; row++) {
-            for (int col = 0; col < 5; col++) {
-                double cx = x + 16 + col * 34 + ((row % 2) * 8);
-                double cy = y + 10 + row * 30 - (roadScroll * 0.7 % 30);
-
-                gc.setFill(Color.web("#7bd447"));
-                gc.fillOval(cx, cy, 18, 18);
-
-                gc.setFill(Color.web("#5bb730"));
-                gc.fillOval(cx + 5, cy + 5, 8, 8);
-            }
         }
     }
 
@@ -857,7 +948,7 @@ public class RaceScene implements AppScene {
             if (!raceStarted) {
                 continue;
             }
-            double aiDistance = clamp(playerDistance + (PLAYER_Y - aiCar.screenY) * 6.0, 0, TRACK_LENGTH);
+            double aiDistance = clamp(playerDistance + (PLAYER_Y - aiCar.screenY) * 6.0, 0, currentTrackLength);
             drawMiniDot(gc, w / 2.0, miniY(aiDistance, h), Color.web("#7dd3fc"), 4.5);
         }
 
@@ -868,13 +959,13 @@ public class RaceScene implements AppScene {
     }
 
     private double miniY(double distance, double height) {
-        double t = clamp(distance, 0, TRACK_LENGTH) / TRACK_LENGTH;
+        double t = clamp(distance, 0, currentTrackLength) / currentTrackLength;
         return (height - 14) - t * (height - 28);
     }
 
     private void updateHud() {
         speedLabel.setText("Tốc độ: " + (int) playerSpeed + " km/h");
-        distanceLabel.setText("Quãng đường: " + (int) playerDistance + " / " + (int) TRACK_LENGTH);
+        distanceLabel.setText("Quãng đường: " + (int) playerDistance + " / " + (int) currentTrackLength + " km");
         mapLabel.setText("Map: " + mapDisplayName());
         crashLabel.setText("Va chạm: " + hitCount + " / " + MAX_HITS);
     }
@@ -960,20 +1051,28 @@ public class RaceScene implements AppScene {
     }
 
     private String mapDisplayName() {
+        return switch (getSafeMapId()) {
+            case NORTH -> "Miền Bắc";
+            case CENTRAL -> "Miền Trung";
+            case SOUTH -> "Miền Nam";
+        };
+    }
+
+    private MapId getSafeMapId() {
         try {
             MapId mapId = game.getSelectedMap();
-            if (mapId == null) {
-                return "Miền Bắc";
-            }
-
-            return switch (mapId) {
-                case NORTH -> "Miền Bắc";
-                case CENTRAL -> "Miền Trung";
-                case SOUTH -> "Miền Nam";
-            };
+            return mapId == null ? MapId.NORTH : mapId;
         } catch (Exception e) {
-            return "Miền Bắc";
+            return MapId.NORTH;
         }
+    }
+
+    private double resolveTrackLength() {
+        return switch (getSafeMapId()) {
+            case NORTH -> NORTH_TRACK_LENGTH;
+            case CENTRAL -> CENTRAL_TRACK_LENGTH;
+            case SOUTH -> SOUTH_TRACK_LENGTH;
+        };
     }
 
     private CarId getEquippedCarId() {
