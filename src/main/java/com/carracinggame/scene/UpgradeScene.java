@@ -2,6 +2,7 @@ package com.carracinggame.scene;
 
 import com.carracinggame.car.CarDefinition;
 import com.carracinggame.car.CarId;
+import com.carracinggame.car.CarSkill;
 import com.carracinggame.core.Game;
 import com.carracinggame.core.GameConfig;
 import com.carracinggame.core.GameState;
@@ -13,7 +14,6 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -37,9 +37,10 @@ public class UpgradeScene implements AppScene {
 
     private static final String FONT = "Arial";
 
-    private static final int MAX_HANDLING = 5;
-    private static final int MAX_SHIELD = 3;
-    private static final int MAX_BRAKE = 5;
+    private static final int MAX_SKILL_LEVEL = 20;
+    private static final int BASE_UPGRADE_COST = 500;
+    private static final int COST_STEP = 250;
+    private static final double BONUS_PER_LEVEL = 0.1;
 
     private final Game game;
     private final Scene scene;
@@ -50,11 +51,11 @@ public class UpgradeScene implements AppScene {
     public UpgradeScene(Game game) {
         this.game = game;
 
-        Label title = new Label("NÂNG CẤP XE");
+        Label title = new Label("NÂNG CẤP SKILL XE");
         title.setFont(Font.font(FONT, FontWeight.EXTRA_BOLD, 34));
         title.setTextFill(Color.WHITE);
 
-        messageLabel = new Label("Tăng chỉ số để né vật cản tốt hơn, hoặc đổi màu sơn / decal cho xe.");
+        messageLabel = new Label("Mỗi cấp tăng +0.1 giây thời gian skill khi đua.");
         messageLabel.setTextFill(Color.web("#cbd5e1"));
         messageLabel.setFont(Font.font(FONT, 16));
         messageLabel.setWrapText(true);
@@ -69,7 +70,7 @@ public class UpgradeScene implements AppScene {
         contentBox = new VBox(20);
         contentBox.setPadding(new Insets(10, 24, 24, 24));
         contentBox.setFillWidth(true);
-        contentBox.setMaxWidth(1500);
+        contentBox.setMaxWidth(1300);
 
         ScrollPane scrollPane = new ScrollPane(contentBox);
         scrollPane.setFitToWidth(true);
@@ -121,34 +122,55 @@ public class UpgradeScene implements AppScene {
         }
 
         UpgradeData data = UpgradeStore.load(getProfileKey(car.getId()));
+        CarSkill skill = CarSkill.forCar(car.getId());
+
         coinLabel.setText("Coin hiện có: " + getCoins());
 
-        Node preview = createCarPreview(car.getId(), data);
+        double bonusSeconds = data.getSkillLevel() * BONUS_PER_LEVEL;
+        double upgradedDuration = skill.activeSeconds() + bonusSeconds;
+        int upgradeCost = getSkillUpgradeCost(data.getSkillLevel());
+
+        Node preview = createCarPreview(car.getId());
 
         Label name = new Label(car.getName());
         name.setTextFill(Color.WHITE);
         name.setFont(Font.font(FONT, FontWeight.EXTRA_BOLD, 28));
 
-        Label stats = new Label(buildStatText(data));
+        Label skillName = new Label("Skill: " + skill.name() + " • " + skill.shortLabel());
+        skillName.setTextFill(Color.web(skill.accentColor()));
+        skillName.setFont(Font.font(FONT, FontWeight.EXTRA_BOLD, 19));
+
+        Label skillDesc = new Label(skill.description());
+        skillDesc.setWrapText(true);
+        skillDesc.setTextFill(Color.web("#dbeafe"));
+        skillDesc.setFont(Font.font(FONT, 15));
+
+        Label stats = new Label(
+                "Cấp skill: " + data.getSkillLevel() + "/" + MAX_SKILL_LEVEL +
+                        "   •   Gốc: " + formatSeconds(skill.activeSeconds()) +
+                        "   •   Cộng thêm: +" + formatSeconds(bonusSeconds) +
+                        "   •   Khi đua: " + formatSeconds(upgradedDuration)
+        );
         stats.setTextFill(Color.web("#dbeafe"));
         stats.setFont(Font.font(FONT, 16));
+        stats.setWrapText(true);
 
-        Label note = new Label("Xe này phù hợp lối chơi né vật cản với Handling, Shield và Brake / Control.");
+        Label note = new Label("Nâng cấp này chỉ tăng thời gian tồn tại của skill. Mỗi cấp +0.1 giây khi dùng skill trong race.");
         note.setWrapText(true);
         note.setTextFill(Color.web("#93c5fd"));
         note.setFont(Font.font(FONT, 15));
 
-        VBox infoBox = new VBox(10, name, stats, note);
+        VBox infoBox = new VBox(10, name, skillName, skillDesc, stats, note);
         infoBox.setAlignment(Pos.CENTER_LEFT);
-        infoBox.setMaxWidth(720);
+        infoBox.setMaxWidth(760);
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         VBox badgeBox = new VBox(12,
-                createBadge("Màu sơn", data.paintName),
-                createBadge("Decal", data.decalName),
-                createBadge("Shield", data.shieldLevel + "/" + MAX_SHIELD)
+                createBadge("Skill Lv", data.getSkillLevel() + "/" + MAX_SKILL_LEVEL),
+                createBadge("Bonus", "+" + formatSeconds(bonusSeconds)),
+                createBadge("Khi đua", formatSeconds(upgradedDuration))
         );
         badgeBox.setAlignment(Pos.TOP_RIGHT);
 
@@ -162,135 +184,57 @@ public class UpgradeScene implements AppScene {
             -fx-border-radius: 24;
         """);
 
-        Label gameplayTitle = createSectionTitle("NÂNG CẤP GAMEPLAY");
+        Label upgradeTitle = createSectionTitle("NÂNG CẤP THỜI GIAN SKILL");
 
-        FlowPane gameplayPane = new FlowPane();
-        gameplayPane.setHgap(18);
-        gameplayPane.setVgap(18);
-        gameplayPane.setPrefWrapLength(1100);
-        gameplayPane.getChildren().addAll(
-                createUpgradeCard(
-                        "Handling",
-                        "Đổi làn nhanh hơn, vào cua gọn hơn, né chướng ngại mượt hơn.",
-                        data.handlingLevel,
-                        MAX_HANDLING,
-                        500 + data.handlingLevel * 400,
-                        "Tăng mạnh khả năng né vật cản.",
-                        () -> buyGameplay(car.getId(), "handling")
-                ),
-                createUpgradeCard(
-                        "Shield",
-                        "Tạo lớp khiên bảo vệ tạm thời. Va chạm sẽ không bị hạ gục ngay.",
-                        data.shieldLevel,
-                        MAX_SHIELD,
-                        800 + data.shieldLevel * 500,
-                        "Cứu thua rất tốt ở đoạn đường khó.",
-                        () -> buyGameplay(car.getId(), "shield")
-                ),
-                createUpgradeCard(
-                        "Brake / Control",
-                        "Giảm tốc và kiểm soát thân xe tốt hơn khi vào đoạn nhiều vật cản.",
-                        data.brakeLevel,
-                        MAX_BRAKE,
-                        400 + data.brakeLevel * 350,
-                        "Hợp lối chơi canh nhịp và né chính xác.",
-                        () -> buyGameplay(car.getId(), "brake")
+        VBox upgradeBox = new VBox(
+                createSkillUpgradeCard(
+                        skill.name(),
+                        "Mỗi lần nâng cấp tăng thêm 0.1 giây cho skill của xe này khi đua.",
+                        data.getSkillLevel(),
+                        MAX_SKILL_LEVEL,
+                        upgradeCost,
+                        skill.activeSeconds(),
+                        upgradedDuration,
+                        () -> buySkillUpgrade(car.getId())
                 )
         );
 
-        Label appearanceTitle = createSectionTitle("NGOẠI HÌNH & CÁ NHÂN HÓA");
-
-        FlowPane paintPane = new FlowPane();
-        paintPane.setHgap(18);
-        paintPane.setVgap(18);
-        paintPane.setPrefWrapLength(1100);
-        paintPane.getChildren().addAll(
-                createStyleCard(
-                        "Xanh Neon",
-                        "Sơn xanh lạnh nổi bật, hợp vibe tốc độ ban đêm.",
-                        250,
-                        data.paintName.equals("Xanh Neon"),
-                        () -> buyPaint(car.getId(), "Xanh Neon", 250)
-                ),
-                createStyleCard(
-                        "Đỏ Flame",
-                        "Sơn đỏ đậm thể thao, cảm giác xe đua hơn.",
-                        300,
-                        data.paintName.equals("Đỏ Flame"),
-                        () -> buyPaint(car.getId(), "Đỏ Flame", 300)
-                ),
-                createStyleCard(
-                        "Vàng Gold",
-                        "Sơn vàng ánh kim, nhìn nổi và sang hơn.",
-                        450,
-                        data.paintName.equals("Vàng Gold"),
-                        () -> buyPaint(car.getId(), "Vàng Gold", 450)
-                )
-        );
-
-        FlowPane decalPane = new FlowPane();
-        decalPane.setHgap(18);
-        decalPane.setVgap(18);
-        decalPane.setPrefWrapLength(1100);
-        decalPane.getChildren().addAll(
-                createStyleCard(
-                        "Decal Tia Chớp",
-                        "Sọc chéo tốc độ, nhìn xe sắc và nhanh hơn.",
-                        300,
-                        data.decalName.equals("Tia Chớp"),
-                        () -> buyDecal(car.getId(), "Tia Chớp", 300)
-                ),
-                createStyleCard(
-                        "Decal Lửa",
-                        "Họa tiết ngọn lửa đậm chất arcade racing.",
-                        400,
-                        data.decalName.equals("Lửa"),
-                        () -> buyDecal(car.getId(), "Lửa", 400)
-                ),
-                createStyleCard(
-                        "Decal Carbon",
-                        "Phong cách carbon tối màu, ngầu và hiện đại.",
-                        550,
-                        data.decalName.equals("Carbon"),
-                        () -> buyDecal(car.getId(), "Carbon", 550)
-                )
-        );
-
-        contentBox.getChildren().addAll(
-                heroCard,
-                gameplayTitle,
-                gameplayPane,
-                appearanceTitle,
-                paintPane,
-                decalPane
-        );
+        contentBox.getChildren().addAll(heroCard, upgradeTitle, upgradeBox);
     }
 
-    private VBox createUpgradeCard(String titleText,
-                                   String descText,
-                                   int currentLevel,
-                                   int maxLevel,
-                                   int costValue,
-                                   String bonusText,
-                                   Runnable action) {
+    private VBox createSkillUpgradeCard(String titleText,
+                                        String descText,
+                                        int currentLevel,
+                                        int maxLevel,
+                                        int costValue,
+                                        double baseDuration,
+                                        double upgradedDuration,
+                                        Runnable action) {
 
         Label title = new Label(titleText);
         title.setTextFill(Color.WHITE);
-        title.setFont(Font.font(FONT, FontWeight.EXTRA_BOLD, 20));
+        title.setFont(Font.font(FONT, FontWeight.EXTRA_BOLD, 22));
 
         Label level = new Label("Cấp hiện tại: " + currentLevel + "/" + maxLevel);
         level.setTextFill(Color.web("#a5f3fc"));
-        level.setFont(Font.font(FONT, FontWeight.BOLD, 14));
+        level.setFont(Font.font(FONT, FontWeight.BOLD, 15));
 
         Label desc = new Label(descText);
         desc.setWrapText(true);
         desc.setTextFill(Color.web("#cbd5e1"));
         desc.setFont(Font.font(FONT, 14));
 
-        Label bonus = new Label("Hiệu quả: " + bonusText);
-        bonus.setWrapText(true);
-        bonus.setTextFill(Color.web("#86efac"));
-        bonus.setFont(Font.font(FONT, 13));
+        Label baseInfo = new Label("Thời gian gốc: " + formatSeconds(baseDuration));
+        baseInfo.setTextFill(Color.web("#cbd5e1"));
+        baseInfo.setFont(Font.font(FONT, 14));
+
+        Label upgradeInfo = new Label("Sau nâng cấp hiện tại khi đua: " + formatSeconds(upgradedDuration));
+        upgradeInfo.setTextFill(Color.web("#86efac"));
+        upgradeInfo.setFont(Font.font(FONT, FontWeight.BOLD, 14));
+
+        Label perLevel = new Label("Mỗi cấp: +0.1 giây");
+        perLevel.setTextFill(Color.web("#93c5fd"));
+        perLevel.setFont(Font.font(FONT, 13));
 
         Label cost = new Label(currentLevel >= maxLevel ? "Đã tối đa" : "Chi phí: " + costValue + " coin");
         cost.setTextFill(currentLevel >= maxLevel ? Color.web("#94a3b8") : Color.web("#fcd34d"));
@@ -301,52 +245,12 @@ public class UpgradeScene implements AppScene {
         upgradeButton.setOpacity(currentLevel >= maxLevel ? 0.75 : 1.0);
         upgradeButton.setOnAction(event -> action.run());
 
-        VBox box = new VBox(12, title, level, desc, bonus, cost, upgradeButton);
-        box.setPrefWidth(320);
-        box.setMinWidth(320);
-        box.setMaxWidth(320);
-        box.setPadding(new Insets(18));
+        VBox box = new VBox(12, title, level, desc, baseInfo, upgradeInfo, perLevel, cost, upgradeButton);
+        box.setPrefWidth(420);
+        box.setMaxWidth(420);
+        box.setPadding(new Insets(20));
         box.setStyle("""
             -fx-background-color: rgba(30,41,59,0.86);
-            -fx-background-radius: 20;
-            -fx-border-color: rgba(255,255,255,0.08);
-            -fx-border-radius: 20;
-        """);
-
-        return box;
-    }
-
-    private VBox createStyleCard(String titleText,
-                                 String descText,
-                                 int costValue,
-                                 boolean selected,
-                                 Runnable action) {
-
-        Label title = new Label(titleText);
-        title.setTextFill(Color.WHITE);
-        title.setFont(Font.font(FONT, FontWeight.EXTRA_BOLD, 19));
-
-        Label desc = new Label(descText);
-        desc.setWrapText(true);
-        desc.setTextFill(Color.web("#cbd5e1"));
-        desc.setFont(Font.font(FONT, 14));
-
-        Label cost = new Label(selected ? "Đang sử dụng" : "Mở khóa: " + costValue + " coin");
-        cost.setTextFill(selected ? Color.web("#86efac") : Color.web("#fcd34d"));
-        cost.setFont(Font.font(FONT, FontWeight.BOLD, 15));
-
-        Button button = createPrimaryButton(selected ? "Đã chọn" : "Mua & áp dụng");
-        button.setDisable(selected);
-        button.setOpacity(selected ? 0.75 : 1.0);
-        button.setOnAction(event -> action.run());
-
-        VBox box = new VBox(12, title, desc, cost, button);
-        box.setPrefWidth(320);
-        box.setMinWidth(320);
-        box.setMaxWidth(320);
-        box.setPadding(new Insets(18));
-        box.setStyle("""
-            -fx-background-color: rgba(22,30,46,0.86);
             -fx-background-radius: 20;
             -fx-border-color: rgba(255,255,255,0.08);
             -fx-border-radius: 20;
@@ -413,116 +317,41 @@ public class UpgradeScene implements AppScene {
         return button;
     }
 
-    private void buyGameplay(CarId carId, String type) {
+    private void buySkillUpgrade(CarId carId) {
         UpgradeData data = UpgradeStore.load(getProfileKey(carId));
 
-        int level;
-        int max;
-        int cost;
-
-        switch (type) {
-            case "handling" -> {
-                level = data.handlingLevel;
-                max = MAX_HANDLING;
-                cost = 500 + level * 400;
-            }
-            case "shield" -> {
-                level = data.shieldLevel;
-                max = MAX_SHIELD;
-                cost = 800 + level * 500;
-            }
-            default -> {
-                level = data.brakeLevel;
-                max = MAX_BRAKE;
-                cost = 400 + level * 350;
-            }
-        }
-
-        if (level >= max) {
-            messageLabel.setText("Hạng mục này đã đạt cấp tối đa.");
+        int level = data.skillLevel;
+        if (level >= MAX_SKILL_LEVEL) {
+            messageLabel.setText("Skill đã đạt cấp tối đa.");
             refresh();
             return;
         }
 
+        int cost = getSkillUpgradeCost(level);
         if (!spendCoins(cost)) {
-            messageLabel.setText("Không đủ coin để nâng cấp " + prettyType(type) + ".");
+            messageLabel.setText("Không đủ coin để nâng cấp skill.");
             refresh();
             return;
         }
 
-        switch (type) {
-            case "handling" -> data.handlingLevel++;
-            case "shield" -> data.shieldLevel++;
-            default -> data.brakeLevel++;
-        }
-
+        data.skillLevel++;
         UpgradeStore.save(getProfileKey(carId), data);
-        messageLabel.setText("Nâng cấp thành công " + prettyType(type) + ".");
+        messageLabel.setText("Nâng cấp skill thành công. +" + formatSeconds(BONUS_PER_LEVEL) + " thời gian khi đua.");
         refresh();
     }
 
-    private void buyPaint(CarId carId, String paintName, int cost) {
-        UpgradeData data = UpgradeStore.load(getProfileKey(carId));
-
-        if (paintName.equals(data.paintName)) {
-            messageLabel.setText("Màu sơn này đang được sử dụng.");
-            refresh();
-            return;
-        }
-
-        if (!spendCoins(cost)) {
-            messageLabel.setText("Không đủ coin để mở khóa màu sơn " + paintName + ".");
-            refresh();
-            return;
-        }
-
-        data.paintName = paintName;
-        UpgradeStore.save(getProfileKey(carId), data);
-        messageLabel.setText("Đã mở khóa và áp dụng màu sơn " + paintName + ".");
-        refresh();
-    }
-
-    private void buyDecal(CarId carId, String decalName, int cost) {
-        UpgradeData data = UpgradeStore.load(getProfileKey(carId));
-
-        if (decalName.equals(data.decalName)) {
-            messageLabel.setText("Decal này đang được sử dụng.");
-            refresh();
-            return;
-        }
-
-        if (!spendCoins(cost)) {
-            messageLabel.setText("Không đủ coin để mở khóa decal " + decalName + ".");
-            refresh();
-            return;
-        }
-
-        data.decalName = decalName;
-        UpgradeStore.save(getProfileKey(carId), data);
-        messageLabel.setText("Đã mở khóa và áp dụng decal " + decalName + ".");
-        refresh();
-    }
-
-    private String buildStatText(UpgradeData data) {
-        return "Handling " + data.handlingLevel + "/" + MAX_HANDLING
-                + "   •   Shield " + data.shieldLevel + "/" + MAX_SHIELD
-                + "   •   Brake " + data.brakeLevel + "/" + MAX_BRAKE;
-    }
-
-    private String prettyType(String type) {
-        return switch (type) {
-            case "handling" -> "Handling";
-            case "shield" -> "Shield";
-            default -> "Brake / Control";
-        };
+    private int getSkillUpgradeCost(int currentLevel) {
+        return BASE_UPGRADE_COST + currentLevel * COST_STEP;
     }
 
     private String getProfileKey(CarId carId) {
-        return resolveUsername() + "|" + String.valueOf(carId);
+        return resolveUsername(game) + "|" + String.valueOf(carId);
     }
 
-    private String resolveUsername() {
+    private static String resolveUsername(Game game) {
         try {
+            if (game == null) return "guest";
+
             Object profile = game.getPlayerProfile();
             if (profile == null) return "guest";
 
@@ -608,7 +437,7 @@ public class UpgradeScene implements AppScene {
         }
     }
 
-    private Node createCarPreview(CarId carId, UpgradeData data) {
+    private Node createCarPreview(CarId carId) {
         StackPane previewBox = new StackPane();
         previewBox.setPrefSize(240, 165);
         previewBox.setMinSize(240, 165);
@@ -624,22 +453,12 @@ public class UpgradeScene implements AppScene {
         carView.setScaleX(0.72);
         carView.setScaleY(0.72);
 
-        CarPaintUtil.applyPaint(carView, data.paintName);
-
-        Label decalLabel = new Label("Decal: " + data.decalName);
-        decalLabel.setTextFill(Color.WHITE);
-        decalLabel.setFont(Font.font(FONT, FontWeight.BOLD, 11));
-        decalLabel.setStyle("""
-            -fx-background-color: rgba(0,0,0,0.35);
-            -fx-background-radius: 10;
-            -fx-padding: 6 10 6 10;
-        """);
-
-        StackPane.setAlignment(decalLabel, Pos.BOTTOM_CENTER);
-        StackPane.setMargin(decalLabel, new Insets(0, 0, 10, 0));
-
-        previewBox.getChildren().addAll(carView, decalLabel);
+        previewBox.getChildren().add(carView);
         return previewBox;
+    }
+
+    private String formatSeconds(double seconds) {
+        return String.format("%.1fs", seconds);
     }
 
     @Override
@@ -657,62 +476,46 @@ public class UpgradeScene implements AppScene {
         return UpgradeStore.load(username + "|" + String.valueOf(carId));
     }
 
+    public static int getSkillLevel(Game game, CarId carId) {
+        return UpgradeStore.load(resolveUsername(game) + "|" + String.valueOf(carId)).getSkillLevel();
+    }
+
+    public static double getExtraSkillSeconds(Game game, CarId carId) {
+        return getSkillLevel(game, carId) * BONUS_PER_LEVEL;
+    }
+
+    public static double getUpgradedSkillDuration(Game game, CarId carId) {
+        return CarSkill.forCar(carId).activeSeconds() + getExtraSkillSeconds(game, carId);
+    }
+
     public static final class UpgradeData {
-        private int handlingLevel;
-        private int shieldLevel;
-        private int brakeLevel;
-        private String paintName = "Mặc định";
-        private String decalName = "Mặc định";
+        private int skillLevel;
 
-        public int getHandlingLevel() {
-            return handlingLevel;
-        }
-
-        public int getShieldLevel() {
-            return shieldLevel;
-        }
-
-        public int getBrakeLevel() {
-            return brakeLevel;
-        }
-
-        public String getPaintName() {
-            return paintName;
-        }
-
-        public String getDecalName() {
-            return decalName;
+        public int getSkillLevel() {
+            return skillLevel;
         }
     }
 
     private static final class UpgradeStore {
         private static final Path STORE_PATH =
-                Paths.get(System.getProperty("user.home"), ".carracinggame", "car-upgrades.properties");
+                Paths.get(System.getProperty("user.home"), ".carracinggame", "car-skill-upgrades.properties");
 
         static UpgradeData load(String key) {
             Properties properties = readProperties();
 
             UpgradeData data = new UpgradeData();
-            data.handlingLevel = parseInt(properties.getProperty(key + ".handling"), 0);
-            data.shieldLevel = parseInt(properties.getProperty(key + ".shield"), 0);
-            data.brakeLevel = parseInt(properties.getProperty(key + ".brake"), 0);
-            data.paintName = properties.getProperty(key + ".paint", "Mặc định");
-            data.decalName = properties.getProperty(key + ".decal", "Mặc định");
+            data.skillLevel = parseInt(properties.getProperty(key + ".skillLevel"), 0);
             return data;
         }
 
         static void save(String key, UpgradeData data) {
             Properties properties = readProperties();
-            properties.setProperty(key + ".handling", String.valueOf(data.handlingLevel));
-            properties.setProperty(key + ".shield", String.valueOf(data.shieldLevel));
-            properties.setProperty(key + ".brake", String.valueOf(data.brakeLevel));
-            properties.setProperty(key + ".paint", data.paintName);
-            properties.setProperty(key + ".decal", data.decalName);
+            properties.setProperty(key + ".skillLevel", String.valueOf(data.skillLevel));
 
             try {
                 Files.createDirectories(STORE_PATH.getParent());
                 try (OutputStream outputStream = Files.newOutputStream(STORE_PATH)) {
-                    properties.store(outputStream, "Car upgrade data");
+                    properties.store(outputStream, "Car skill upgrade data");
                 }
             } catch (IOException ignored) {
             }
