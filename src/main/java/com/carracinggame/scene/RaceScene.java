@@ -13,6 +13,7 @@ import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
@@ -20,12 +21,15 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -36,6 +40,7 @@ import java.util.Set;
 
 public class RaceScene implements AppScene {
 
+    private static final double AI_STOP_SPAWN_EXTRA = 12.0;
     private static final double VIEW_W = 520;
     private static final double VIEW_H = 760;
 
@@ -50,6 +55,10 @@ public class RaceScene implements AppScene {
     private static final double AI_ACTOR_H = 98;
     private static final double POLICE_ACTOR_W = 66;
     private static final double POLICE_ACTOR_H = 102;
+
+    private static final double STOP_LINE_GAP = 6.0;
+    private static final double SAME_DIR_STOP_MARGIN = AI_ACTOR_H / 2.0 + STOP_LINE_GAP;
+    private static final double OPPOSITE_DIR_STOP_MARGIN = AI_ACTOR_H / 2.0 + STOP_LINE_GAP;
 
     private static final double NORTH_TRACK_LENGTH = 15000;
     private static final double CENTRAL_TRACK_LENGTH = 18000;
@@ -75,6 +84,8 @@ public class RaceScene implements AppScene {
     private static final double SAME_DIR_SPAWN_MAX = 3.0;
     private static final double OPPOSITE_DIR_SPAWN_MIN = 2.8;
     private static final double OPPOSITE_DIR_SPAWN_MAX = 4.2;
+    private static final double SIDE_ROAD_SPAWN_MIN = 2.0;
+    private static final double SIDE_ROAD_SPAWN_MAX = 3.8;
 
     private static final double SAME_DIR_MIN_SPEED = 110;
     private static final double SAME_DIR_MAX_SPEED = 260;
@@ -99,6 +110,25 @@ public class RaceScene implements AppScene {
     private static final double EMP_RANGE = 270;
     private static final double EMP_PULSE_INTERVAL = 0.18;
     private static final double PHANTOM_SPEED_BOOST = 85;
+
+    private static final double AI_RANDOM_TURN_CHANCE = 0.38;
+    private static final double AI_TURN_DURATION_MIN = 1.05;
+    private static final double AI_TURN_DURATION_MAX = 1.42;
+    private static final double AI_MAIN_TURN_ARC = 16.0;
+    private static final double AI_SIDE_TURN_ARC = 11.0;
+    private static final double AI_TURN_TRIGGER_MARGIN = 24.0;
+    private static final double SIDE_MERGE_SAFE_GAP = 130.0;
+    private static final double SIDE_ROAD_OPENING_OVERLAP = 16.0;
+
+    private enum AiMoveMode {
+        MAIN_ROAD,
+        TURN_OUT_RIGHT,
+        TURN_OUT_LEFT,
+        ENTER_FROM_RIGHT_TO_UP,
+        ENTER_FROM_RIGHT_TO_DOWN,
+        ENTER_FROM_LEFT_TO_UP,
+        ENTER_FROM_LEFT_TO_DOWN
+    }
 
     private static final String DEFAULT_TIP_TEXT =
             "↑/W tăng tốc   •   ↓/S phanh   •   ← → / A D chuyển làn   •   SPACE dùng skill";
@@ -161,6 +191,7 @@ public class RaceScene implements AppScene {
 
     private double sameDirSpawnTimer = 1.0;
     private double oppositeDirSpawnTimer = 1.8;
+    private double sideRoadSpawnTimer = 2.4;
     private double pedestrianSpawnTimer = PEDESTRIAN_SPAWN_INTERVAL;
 
     private CityRoadBlock monitoredTrafficBlock;
@@ -319,6 +350,7 @@ public class RaceScene implements AppScene {
 
         sameDirSpawnTimer = 1.0;
         oppositeDirSpawnTimer = 1.8;
+        sideRoadSpawnTimer = 2.4;
         pedestrianSpawnTimer = PEDESTRIAN_SPAWN_INTERVAL;
 
         monitoredTrafficBlock = null;
@@ -740,6 +772,7 @@ public class RaceScene implements AppScene {
     private void updateTrafficSpawners(double dt) {
         sameDirSpawnTimer -= dt;
         oppositeDirSpawnTimer -= dt;
+        sideRoadSpawnTimer -= dt;
 
         if (sameDirSpawnTimer <= 0) {
             spawnAiCar(true);
@@ -749,6 +782,11 @@ public class RaceScene implements AppScene {
         if (oppositeDirSpawnTimer <= 0) {
             spawnAiCar(false);
             oppositeDirSpawnTimer = randomRange(OPPOSITE_DIR_SPAWN_MIN, OPPOSITE_DIR_SPAWN_MAX);
+        }
+
+        if (sideRoadSpawnTimer <= 0) {
+            spawnSideRoadAiCar();
+            sideRoadSpawnTimer = randomRange(SIDE_ROAD_SPAWN_MIN, SIDE_ROAD_SPAWN_MAX);
         }
     }
 
@@ -937,27 +975,27 @@ public class RaceScene implements AppScene {
         double currentWorld = screenYToWorldDistance(aiCar.screenY);
         double nextWorld = screenYToWorldDistance(nextY);
 
-        double stopMargin = 52.0;
-
         if (aiCar.sameDirection) {
-            double maxWorld = stopWorld - stopMargin;
+            // Xe cùng chiều: dừng ở vạch dưới (vạch 2), nên tâm xe thấp hơn vạch một đoạn
+            double stopCenterWorld = stopWorld - SAME_DIR_STOP_MARGIN;
 
-            if (currentWorld <= maxWorld && nextWorld > maxWorld) {
-                return worldToScreenY(maxWorld);
+            if (currentWorld <= stopCenterWorld && nextWorld > stopCenterWorld) {
+                return worldToScreenY(stopCenterWorld);
             }
 
-            if (currentWorld > maxWorld && currentWorld < stopWorld + 14) {
-                return worldToScreenY(maxWorld);
+            if (currentWorld > stopCenterWorld && currentWorld < stopCenterWorld + 12) {
+                return worldToScreenY(stopCenterWorld);
             }
         } else {
-            double minWorld = stopWorld + stopMargin;
+            // Xe ngược chiều: dừng ở vạch trên (vạch 1), nên tâm xe cao hơn vạch một đoạn
+            double stopCenterWorld = stopWorld + OPPOSITE_DIR_STOP_MARGIN;
 
-            if (currentWorld >= minWorld && nextWorld < minWorld) {
-                return worldToScreenY(minWorld);
+            if (currentWorld >= stopCenterWorld && nextWorld < stopCenterWorld) {
+                return worldToScreenY(stopCenterWorld);
             }
 
-            if (currentWorld < minWorld && currentWorld > stopWorld - 14) {
-                return worldToScreenY(minWorld);
+            if (currentWorld < stopCenterWorld && currentWorld > stopCenterWorld - 12) {
+                return worldToScreenY(stopCenterWorld);
             }
         }
 
@@ -965,6 +1003,13 @@ public class RaceScene implements AppScene {
     }
 
     private void updateAiCars(double dt) {
+        for (AiCar aiCar : aiCars) {
+            if (!aiCar.active) {
+                continue;
+            }
+            maybeStartMainRoadTurn(aiCar);
+        }
+
         List<AiCar> sameDirCars = new ArrayList<>();
         List<AiCar> oppositeCars = new ArrayList<>();
 
@@ -972,6 +1017,11 @@ public class RaceScene implements AppScene {
             if (!aiCar.active) {
                 continue;
             }
+
+            if (updateSpecialAiMovement(aiCar, dt)) {
+                continue;
+            }
+
             if (aiCar.sameDirection) {
                 sameDirCars.add(aiCar);
             } else {
@@ -997,6 +1047,7 @@ public class RaceScene implements AppScene {
             }
 
             aiCar.screenY = nextY;
+            aiCar.x = laneCenter(aiCar.lane);
         }
 
         oppositeCars.sort(Comparator.comparingDouble(a -> a.screenY));
@@ -1017,6 +1068,7 @@ public class RaceScene implements AppScene {
             }
 
             aiCar.screenY = nextY;
+            aiCar.x = laneCenter(aiCar.lane);
         }
 
         for (AiCar aiCar : aiCars) {
@@ -1024,21 +1076,17 @@ public class RaceScene implements AppScene {
                 continue;
             }
 
-            if (aiCar.sameDirection) {
-                if (aiCar.screenY > AI_DESPAWN_BOTTOM || aiCar.screenY < AI_DESPAWN_TOP) {
-                    aiCar.active = false;
-                    aiCar.actor.setVisible(false);
-                    continue;
-                }
-            } else {
-                if (aiCar.screenY > AI_DESPAWN_BOTTOM) {
-                    aiCar.active = false;
-                    aiCar.actor.setVisible(false);
-                    continue;
-                }
+            if (aiCar.screenY > AI_DESPAWN_BOTTOM || aiCar.screenY < AI_DESPAWN_TOP - 80) {
+                aiCar.active = false;
+                aiCar.actor.setVisible(false);
+                continue;
             }
 
             if (phantomDashActive || invulnerableTime > 0) {
+                continue;
+            }
+
+            if (aiCar.moveMode != AiMoveMode.MAIN_ROAD) {
                 continue;
             }
 
@@ -1126,7 +1174,7 @@ public class RaceScene implements AppScene {
 
         slot.active = true;
         slot.sameDirection = sameDirection;
-        slot.resetCar(sameDirection ? randomSameDirectionCarId() : randomOppositeDirectionCarId());
+        slot.resetRouteState();
 
         if (sameDirection) {
             if (playerSpeed < 120) {
@@ -1135,45 +1183,417 @@ public class RaceScene implements AppScene {
                 return;
             }
 
-            slot.lane = random.nextBoolean() ? 2 : 3;
-            slot.x = laneCenter(slot.lane);
-
             double slowerThanPlayer = playerSpeed - randomRange(70, 150);
             slot.speed = clamp(slowerThanPlayer, SAME_DIR_MIN_SPEED, SAME_DIR_MAX_SPEED);
 
+            slot.lane = random.nextBoolean() ? 2 : 3;
+            maybeAssignMainRoadTurn(slot);
+            if (slot.reservedTurn) {
+                slot.lane = 3;
+            }
+
+            slot.x = laneCenter(slot.lane);
             slot.screenY = 90 + random.nextInt(130);
             ensureSameDirectionGap(slot);
         } else {
-            slot.lane = random.nextBoolean() ? 0 : 1;
-            slot.x = laneCenter(slot.lane);
             slot.speed = randomRange(OPPOSITE_DIR_MIN_SPEED, OPPOSITE_DIR_MAX_SPEED);
+
+            slot.lane = random.nextBoolean() ? 0 : 1;
+            maybeAssignMainRoadTurn(slot);
+            if (slot.reservedTurn) {
+                slot.lane = 0;
+            }
+
+            slot.x = laneCenter(slot.lane);
             slot.screenY = -130 - random.nextInt(120);
             ensureOppositeGap(slot);
         }
 
+        slot.resetCar(sameDirection ? randomSameDirectionCarId() : randomOppositeDirectionCarId());
+        applyAiOrientation(slot);
+
         Double stopY = findNearestRedStopYForAi(slot);
         if (stopY != null) {
             double stopWorld = screenYToWorldDistance(stopY);
-            double stopMargin = 60.0;
 
             if (slot.sameDirection) {
-                double maxWorld = stopWorld - stopMargin;
+                double stopCenterWorld = stopWorld - SAME_DIR_STOP_MARGIN;
                 double slotWorld = screenYToWorldDistance(slot.screenY);
 
-                if (slotWorld > maxWorld) {
-                    slot.screenY = worldToScreenY(maxWorld - 10 - random.nextInt(16));
+                if (slotWorld > stopCenterWorld) {
+                    slot.screenY = worldToScreenY(stopCenterWorld - AI_STOP_SPAWN_EXTRA - random.nextInt(10));
                 }
             } else {
-                double minWorld = stopWorld + stopMargin;
+                double stopCenterWorld = stopWorld + OPPOSITE_DIR_STOP_MARGIN;
                 double slotWorld = screenYToWorldDistance(slot.screenY);
 
-                if (slotWorld < minWorld) {
-                    slot.screenY = worldToScreenY(minWorld + 10 + random.nextInt(16));
+                if (slotWorld < stopCenterWorld) {
+                    slot.screenY = worldToScreenY(stopCenterWorld + AI_STOP_SPAWN_EXTRA + random.nextInt(10));
                 }
             }
         }
 
         slot.actor.setVisible(true);
+    }
+
+    private void maybeAssignMainRoadTurn(AiCar aiCar) {
+        aiCar.reservedTurn = false;
+        aiCar.plannedTurnBlock = null;
+
+        if (random.nextDouble() > AI_RANDOM_TURN_CHANCE) {
+            return;
+        }
+
+        CityRoadBlock block = findTurnableBlockForMainRoad(aiCar.sameDirection, 220, 1200);
+        if (block == null) {
+            return;
+        }
+
+        if (aiCar.sameDirection && !hasRightConnection(block)) {
+            return;
+        }
+
+        if (!aiCar.sameDirection && !hasLeftConnection(block)) {
+            return;
+        }
+
+        aiCar.reservedTurn = true;
+        aiCar.plannedTurnBlock = block;
+    }
+
+    private CityRoadBlock findTurnableBlockForMainRoad(boolean sameDirection, double minAhead, double maxAhead) {
+        List<CityRoadBlock> blocks = cityRoadGenerator.getVisibleBlocks(playerDistance, 0, maxAhead);
+        CityRoadBlock best = null;
+        double bestDelta = Double.MAX_VALUE;
+
+        for (CityRoadBlock block : blocks) {
+            double center = block.getStartDistance() + block.getLength() * 0.5;
+            double delta = center - playerDistance;
+
+            if (delta < minAhead || delta > maxAhead) {
+                continue;
+            }
+
+            if (getJunctionRoadHalf(block) <= 0) {
+                continue;
+            }
+
+            if (sameDirection && !hasRightConnection(block)) {
+                continue;
+            }
+
+            if (!sameDirection && !hasLeftConnection(block)) {
+                continue;
+            }
+
+            if (delta < bestDelta) {
+                bestDelta = delta;
+                best = block;
+            }
+        }
+
+        return best;
+    }
+
+    private CityRoadBlock findSideSpawnBlock(double minAhead, double maxAhead) {
+        List<CityRoadBlock> blocks = cityRoadGenerator.getVisibleBlocks(playerDistance, 0, maxAhead);
+        List<CityRoadBlock> candidates = new ArrayList<>();
+
+        for (CityRoadBlock block : blocks) {
+            double center = block.getStartDistance() + block.getLength() * 0.5;
+            double delta = center - playerDistance;
+
+            if (delta < minAhead || delta > maxAhead) {
+                continue;
+            }
+
+            if (getJunctionRoadHalf(block) <= 0) {
+                continue;
+            }
+
+            if (!hasLeftConnection(block) && !hasRightConnection(block)) {
+                continue;
+            }
+
+            if (block.hasTrafficLight()) {
+                TrafficLightState mainState = cityRoadGenerator.getTrafficLightState(raceElapsed, block.getIndex());
+                TrafficLightState sideState = getSideRoadLightState(mainState);
+                if (sideState != TrafficLightState.GREEN) {
+                    continue;
+                }
+            }
+
+            candidates.add(block);
+        }
+
+        if (candidates.isEmpty()) {
+            return null;
+        }
+
+        int index = random.nextInt(Math.min(candidates.size(), 3));
+        return candidates.get(index);
+    }
+
+    private boolean isLaneBusyAround(int lane, double y, double minGap) {
+        if (currentLane == lane && Math.abs(PLAYER_Y - y) < minGap) {
+            return true;
+        }
+
+        for (AiCar aiCar : aiCars) {
+            if (!aiCar.active) {
+                continue;
+            }
+            if (aiCar.moveMode != AiMoveMode.MAIN_ROAD) {
+                continue;
+            }
+            if (aiCar.lane == lane && Math.abs(aiCar.screenY - y) < minGap) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void spawnSideRoadAiCar() {
+        AiCar slot = findInactiveAiCar();
+        if (slot == null) {
+            return;
+        }
+
+        CityRoadBlock block = findSideSpawnBlock(160, 900);
+        if (block == null) {
+            return;
+        }
+
+        boolean canLeft = hasLeftConnection(block);
+        boolean canRight = hasRightConnection(block);
+
+        boolean fromRight;
+        if (canLeft && canRight) {
+            fromRight = random.nextBoolean();
+        } else {
+            fromRight = canRight;
+        }
+
+        boolean toUp = random.nextBoolean();
+
+        int targetLane;
+        AiMoveMode mode;
+
+        if (fromRight) {
+            targetLane = toUp ? 3 : 1;
+            mode = toUp ? AiMoveMode.ENTER_FROM_RIGHT_TO_UP : AiMoveMode.ENTER_FROM_RIGHT_TO_DOWN;
+        } else {
+            targetLane = toUp ? 2 : 0;
+            mode = toUp ? AiMoveMode.ENTER_FROM_LEFT_TO_UP : AiMoveMode.ENTER_FROM_LEFT_TO_DOWN;
+        }
+
+        double centerWorld = block.getStartDistance() + block.getLength() * 0.5;
+        double centerY = worldToScreenY(centerWorld);
+        double endX = laneCenter(targetLane);
+        double endY = centerY + (toUp ? 52 : -52);
+
+        if (isLaneBusyAround(targetLane, endY, SIDE_MERGE_SAFE_GAP)) {
+            return;
+        }
+
+        slot.active = true;
+        slot.sameDirection = toUp;
+        slot.lane = targetLane;
+        slot.speed = toUp
+                ? randomRange(SAME_DIR_MIN_SPEED, SAME_DIR_MAX_SPEED)
+                : randomRange(OPPOSITE_DIR_MIN_SPEED, OPPOSITE_DIR_MAX_SPEED);
+        slot.resetRouteState();
+
+        slot.x = fromRight ? VIEW_W + 132 : -132;
+        slot.screenY = centerY + (toUp ? 12 : -12);
+
+        slot.resetCar(randomAiCarId());
+
+        slot.beginCurve(
+                mode,
+                endX,
+                endY,
+                centerWorld,
+                targetLane
+        );
+
+        applyAiOrientation(slot);
+        slot.actor.setVisible(true);
+    }
+
+    private boolean isMainRoadRedAtBlock(CityRoadBlock block) {
+        return block != null
+                && block.hasTrafficLight()
+                && cityRoadGenerator.getTrafficLightState(raceElapsed, block.getIndex()) == TrafficLightState.RED;
+    }
+
+    private boolean maybeStartMainRoadTurn(AiCar aiCar) {
+        if (!aiCar.active || aiCar.moveMode != AiMoveMode.MAIN_ROAD) {
+            return false;
+        }
+
+        if (!aiCar.reservedTurn || aiCar.plannedTurnBlock == null) {
+            return false;
+        }
+
+        CityRoadBlock block = aiCar.plannedTurnBlock;
+
+        if (isMainRoadRedAtBlock(block)) {
+            return false;
+        }
+
+        double centerWorld = block.getStartDistance() + block.getLength() * 0.5;
+        double roadHalf = getJunctionRoadHalf(block);
+        double currentWorld = screenYToWorldDistance(aiCar.screenY);
+
+        if (aiCar.sameDirection) {
+            if (!hasRightConnection(block)) {
+                return false;
+            }
+
+            double triggerWorld = centerWorld - roadHalf - AI_TURN_TRIGGER_MARGIN;
+            if (currentWorld < triggerWorld) {
+                return false;
+            }
+
+            aiCar.beginCurve(
+                    AiMoveMode.TURN_OUT_RIGHT,
+                    VIEW_W + 132,
+                    worldToScreenY(centerWorld + 6),
+                    centerWorld,
+                    -1
+            );
+            applyAiOrientation(aiCar);
+            return true;
+        } else {
+            if (!hasLeftConnection(block)) {
+                return false;
+            }
+
+            double triggerWorld = centerWorld + roadHalf + AI_TURN_TRIGGER_MARGIN;
+            if (currentWorld > triggerWorld) {
+                return false;
+            }
+
+            aiCar.beginCurve(
+                    AiMoveMode.TURN_OUT_LEFT,
+                    -132,
+                    worldToScreenY(centerWorld - 6),
+                    centerWorld,
+                    -1
+            );
+            applyAiOrientation(aiCar);
+            return true;
+        }
+    }
+
+    private boolean updateSpecialAiMovement(AiCar aiCar, double dt) {
+        if (!aiCar.active || aiCar.moveMode == AiMoveMode.MAIN_ROAD) {
+            return false;
+        }
+
+        aiCar.turnProgress += dt;
+        double p = clamp(aiCar.turnProgress / aiCar.turnDuration, 0, 1);
+        double t = smoothstep(p);
+        double arc = Math.sin(Math.PI * t);
+
+        switch (aiCar.moveMode) {
+            case TURN_OUT_RIGHT -> {
+                aiCar.x = lerp(aiCar.turnStartX, aiCar.turnEndX, t);
+                aiCar.screenY = lerp(aiCar.turnStartY, aiCar.turnEndY, t) - AI_MAIN_TURN_ARC * arc;
+                setAiNodeRotate(aiCar, lerp(0, 90, t));
+            }
+            case TURN_OUT_LEFT -> {
+                aiCar.x = lerp(aiCar.turnStartX, aiCar.turnEndX, t);
+                aiCar.screenY = lerp(aiCar.turnStartY, aiCar.turnEndY, t) + AI_MAIN_TURN_ARC * arc;
+                setAiNodeRotate(aiCar, lerp(180, 270, t));
+            }
+            case ENTER_FROM_RIGHT_TO_UP -> {
+                aiCar.x = lerp(aiCar.turnStartX, aiCar.turnEndX, t);
+                aiCar.screenY = lerp(aiCar.turnStartY, aiCar.turnEndY, t) + AI_SIDE_TURN_ARC * arc;
+                setAiNodeRotate(aiCar, lerp(270, 360, t));
+            }
+            case ENTER_FROM_RIGHT_TO_DOWN -> {
+                aiCar.x = lerp(aiCar.turnStartX, aiCar.turnEndX, t);
+                aiCar.screenY = lerp(aiCar.turnStartY, aiCar.turnEndY, t) - AI_SIDE_TURN_ARC * arc;
+                setAiNodeRotate(aiCar, lerp(270, 180, t));
+            }
+            case ENTER_FROM_LEFT_TO_UP -> {
+                aiCar.x = lerp(aiCar.turnStartX, aiCar.turnEndX, t);
+                aiCar.screenY = lerp(aiCar.turnStartY, aiCar.turnEndY, t) + AI_SIDE_TURN_ARC * arc;
+                setAiNodeRotate(aiCar, lerp(90, 0, t));
+            }
+            case ENTER_FROM_LEFT_TO_DOWN -> {
+                aiCar.x = lerp(aiCar.turnStartX, aiCar.turnEndX, t);
+                aiCar.screenY = lerp(aiCar.turnStartY, aiCar.turnEndY, t) - AI_SIDE_TURN_ARC * arc;
+                setAiNodeRotate(aiCar, lerp(90, 180, t));
+            }
+            default -> {
+                return false;
+            }
+        }
+
+        if (p >= 1) {
+            finishSpecialAiMovement(aiCar);
+        }
+
+        return true;
+    }
+
+    private void finishSpecialAiMovement(AiCar aiCar) {
+        AiMoveMode finishedMode = aiCar.moveMode;
+
+        switch (finishedMode) {
+            case TURN_OUT_RIGHT, TURN_OUT_LEFT -> {
+                aiCar.active = false;
+                aiCar.actor.setVisible(false);
+            }
+            case ENTER_FROM_RIGHT_TO_UP, ENTER_FROM_LEFT_TO_UP -> {
+                aiCar.sameDirection = true;
+                aiCar.lane = aiCar.mergeLane;
+                aiCar.x = laneCenter(aiCar.lane);
+                aiCar.screenY = aiCar.turnEndY;
+                aiCar.resetRouteState();
+                applyAiOrientation(aiCar);
+            }
+            case ENTER_FROM_RIGHT_TO_DOWN, ENTER_FROM_LEFT_TO_DOWN -> {
+                aiCar.sameDirection = false;
+                aiCar.lane = aiCar.mergeLane;
+                aiCar.x = laneCenter(aiCar.lane);
+                aiCar.screenY = aiCar.turnEndY;
+                aiCar.resetRouteState();
+                applyAiOrientation(aiCar);
+            }
+            default -> {
+            }
+        }
+    }
+
+    private void applyAiOrientation(AiCar aiCar) {
+        double angle = switch (aiCar.moveMode) {
+            case MAIN_ROAD -> aiCar.sameDirection ? 0 : 180;
+            case TURN_OUT_RIGHT -> 0;
+            case TURN_OUT_LEFT -> 180;
+            case ENTER_FROM_RIGHT_TO_UP, ENTER_FROM_RIGHT_TO_DOWN -> 270;
+            case ENTER_FROM_LEFT_TO_UP, ENTER_FROM_LEFT_TO_DOWN -> 90;
+        };
+
+        setAiNodeRotate(aiCar, angle);
+    }
+
+    private void setAiNodeRotate(AiCar aiCar, double angle) {
+        if (!aiCar.actor.getChildren().isEmpty()) {
+            aiCar.actor.getChildren().get(0).setRotate(angle);
+        }
+    }
+
+    private double lerp(double a, double b, double t) {
+        return a + (b - a) * t;
+    }
+
+    private double smoothstep(double t) {
+        return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
     }
 
     private void ensureSameDirectionGap(AiCar spawned) {
@@ -1478,9 +1898,9 @@ public class RaceScene implements AppScene {
 
     private double getJunctionRoadHalf(CityRoadBlock block) {
         return switch (block.getType()) {
-            case CROSSROAD, T_JUNCTION_LEFT, T_JUNCTION_RIGHT -> 36.0;
-            case ALLEY_LEFT, ALLEY_RIGHT -> 26.0;
-            case STRAIGHT -> (block.hasLeftAlley() || block.hasRightAlley()) ? 24.0 : 0.0;
+            case CROSSROAD, T_JUNCTION_LEFT, T_JUNCTION_RIGHT -> 48.0;
+            case ALLEY_LEFT, ALLEY_RIGHT -> 34.0;
+            case STRAIGHT -> (block.hasLeftAlley() || block.hasRightAlley()) ? 30.0 : 0.0;
         };
     }
 
@@ -1638,8 +2058,12 @@ public class RaceScene implements AppScene {
     }
 
     private void drawWideSideStreet(GraphicsContext gc, boolean left, double y, double height) {
-        double x = left ? 0 : ROAD_X + ROAD_W;
-        double width = left ? ROAD_X + SIDEWALK_W : VIEW_W - (ROAD_X + ROAD_W);
+        double overlap = SIDE_ROAD_OPENING_OVERLAP;
+        double x = left ? 0 : ROAD_X + ROAD_W - overlap;
+        double width = left
+                ? ROAD_X + SIDEWALK_W + overlap
+                : VIEW_W - (ROAD_X + ROAD_W - overlap);
+        double centerY = y + height / 2.0;
 
         gc.setFill(Color.web("#595b62"));
         gc.fillRect(x, y, width, height);
@@ -1648,19 +2072,26 @@ public class RaceScene implements AppScene {
         gc.fillRect(x, y - 8, width, 8);
         gc.fillRect(x, y + height, width, 8);
 
-        gc.setStroke(Color.rgb(255, 255, 255, 0.76));
-        gc.setLineWidth(2.0);
-        gc.setLineDashes(16, 14);
-        gc.strokeLine(x + 14, y + height / 2.0, x + width - 14, y + height / 2.0);
+        gc.setStroke(Color.rgb(255, 255, 255, 0.28));
+        gc.setLineWidth(1.0);
+        gc.strokeLine(x, y + 3, x + width, y + 3);
+        gc.strokeLine(x, y + height - 3, x + width, y + height - 3);
+
+        double upperInnerLane = y + height * 0.26;
+        double lowerInnerLane = y + height * 0.74;
+
+        gc.setStroke(Color.rgb(255, 255, 255, 0.42));
+        gc.setLineWidth(1.1);
+        gc.setLineDashes(10, 10);
+        gc.strokeLine(x + 10, upperInnerLane, x + width - 10, upperInnerLane);
+        gc.strokeLine(x + 10, lowerInnerLane, x + width - 10, lowerInnerLane);
+
+        gc.setStroke(Color.web("#e7c84b"));
+        gc.setLineWidth(1.3);
+        gc.setLineDashes(10, 8);
+        gc.strokeLine(x + 10, centerY - 3.0, x + width - 10, centerY - 3.0);
+        gc.strokeLine(x + 10, centerY + 3.0, x + width - 10, centerY + 3.0);
         gc.setLineDashes();
-
-        gc.setStroke(Color.rgb(255, 255, 255, 0.38));
-        gc.setLineWidth(1.2);
-        gc.strokeLine(x, y + 8, x + width, y + 8);
-        gc.strokeLine(x, y + height - 8, x + width, y + height - 8);
-
-        double arrowX = left ? Math.max(26, width * 0.35) : x + width * 0.65;
-        drawHorizontalArrow(gc, arrowX, y + height / 2.0, left);
     }
 
     private void drawCrosswalk(GraphicsContext gc, double y) {
@@ -1754,8 +2185,16 @@ public class RaceScene implements AppScene {
         gc.setStroke(Color.rgb(255, 255, 255, 0.98));
         gc.setLineWidth(4.0);
 
-        double y1 = middleY - 22;
-        double y2 = middleY + 22;
+        double y1;
+        double y2;
+
+        if (fromLeft) {
+            y1 = middleY;
+            y2 = middleY + 24;
+        } else {
+            y1 = middleY - 24;
+            y2 = middleY;
+        }
 
         gc.strokeLine(x, y1, x, y2);
 
@@ -2134,9 +2573,7 @@ public class RaceScene implements AppScene {
     }
 
     private StackPane createPoliceActor(double scale, double width, double height) {
-        Node carNode = CarViewFactory.createObstacleRaceCar(CarId.RED_RACER);
-        carNode.setScaleX(scale);
-        carNode.setScaleY(scale);
+        Node carNode = createPoliceCarNode(scale, width, height);
 
         StackPane wrapper = new StackPane(carNode);
         wrapper.setPrefSize(width, height);
@@ -2147,6 +2584,43 @@ public class RaceScene implements AppScene {
             -fx-effect: dropshadow(gaussian, rgba(255,255,255,0.35), 20, 0.3, 0, 0);
         """);
         return wrapper;
+    }
+
+    private Node createPoliceCarNode(double scale, double width, double height) {
+        String[] policePaths = {
+                "/images/cars/police.png",
+                "/images/cars/police_car.png",
+                "/images/cars/ai/police.png",
+                "/images/cars/ai/police_car.png",
+                "/images/police.png"
+        };
+
+        for (String path : policePaths) {
+            URL url = getClass().getResource(path);
+            if (url == null) {
+                continue;
+            }
+
+            Image image = new Image(url.toExternalForm(), false);
+            if (image.isError() || image.getWidth() <= 0) {
+                continue;
+            }
+
+            ImageView imageView = new ImageView(image);
+            imageView.setPreserveRatio(true);
+            imageView.setFitWidth(width * 0.88);
+            imageView.setFitHeight(height * 0.88);
+            imageView.setSmooth(true);
+            imageView.setCache(true);
+            imageView.setScaleX(scale);
+            imageView.setScaleY(scale);
+            return imageView;
+        }
+
+        Node fallback = CarViewFactory.createObstacleRaceCar(CarId.RED_RACER);
+        fallback.setScaleX(scale);
+        fallback.setScaleY(scale);
+        return fallback;
     }
 
     private StackPane createAiActor(CarId carId, double scale, double width, double height) {
@@ -2176,9 +2650,11 @@ public class RaceScene implements AppScene {
 
         if (roadHalf > 0) {
             if (fromBottomToTop) {
-                return middle + roadHalf + 10.0;
+                // Xe cùng chiều đi từ dưới lên: dừng ở vạch dưới (vạch 2)
+                return middle - roadHalf - 10.0;
             }
-            return middle - roadHalf - 10.0;
+            // Xe ngược chiều đi từ trên xuống: dừng ở vạch trên (vạch 1)
+            return middle + roadHalf + 10.0;
         }
 
         return block.getStartDistance() + block.getLength() * 0.55;
@@ -2317,8 +2793,47 @@ public class RaceScene implements AppScene {
         private double speed;
         private final StackPane actor;
 
+        private AiMoveMode moveMode = AiMoveMode.MAIN_ROAD;
+        private boolean reservedTurn = false;
+        private CityRoadBlock plannedTurnBlock;
+
+        private double turnProgress = 0;
+        private double turnDuration = 0.65;
+        private double turnStartX;
+        private double turnStartY;
+        private double turnEndX;
+        private double turnEndY;
+        private double routeCenterWorld = -1;
+        private int mergeLane = -1;
+
         private AiCar(CarId carId) {
             this.actor = createAiActor(carId, 1.28, AI_ACTOR_W, AI_ACTOR_H);
+        }
+
+        private void resetRouteState() {
+            moveMode = AiMoveMode.MAIN_ROAD;
+            reservedTurn = false;
+            plannedTurnBlock = null;
+            turnProgress = 0;
+            turnDuration = randomRange(AI_TURN_DURATION_MIN, AI_TURN_DURATION_MAX);
+            turnStartX = 0;
+            turnStartY = 0;
+            turnEndX = 0;
+            turnEndY = 0;
+            routeCenterWorld = -1;
+            mergeLane = -1;
+        }
+
+        private void beginCurve(AiMoveMode mode, double endX, double endY, double centerWorld, int mergeLane) {
+            this.moveMode = mode;
+            this.turnProgress = 0;
+            this.turnDuration = randomRange(AI_TURN_DURATION_MIN, AI_TURN_DURATION_MAX);
+            this.turnStartX = this.x;
+            this.turnStartY = this.screenY;
+            this.turnEndX = endX;
+            this.turnEndY = endY;
+            this.routeCenterWorld = centerWorld;
+            this.mergeLane = mergeLane;
         }
 
         private void resetCar(CarId carId) {
@@ -2326,13 +2841,6 @@ public class RaceScene implements AppScene {
             Node carNode = CarViewFactory.createObstacleRaceCar(carId);
             carNode.setScaleX(1.28);
             carNode.setScaleY(1.28);
-
-            if (!sameDirection) {
-                carNode.setRotate(180);
-            } else {
-                carNode.setRotate(0);
-            }
-
             actor.getChildren().add(carNode);
             actor.toFront();
         }
