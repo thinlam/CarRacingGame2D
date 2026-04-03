@@ -4,6 +4,8 @@ import com.carracinggame.car.CarId;
 import com.carracinggame.car.CarSkill;
 import com.carracinggame.core.Game;
 import com.carracinggame.core.GameState;
+import com.carracinggame.core.UserSession;
+import com.carracinggame.database.LeaderboardDAO;
 import com.carracinggame.map.CityRoadBlock;
 import com.carracinggame.map.CityRoadBlockType;
 import com.carracinggame.map.CityRoadGenerator;
@@ -13,7 +15,6 @@ import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
@@ -103,8 +104,36 @@ public class RaceScene implements AppScene {
     private static final double PEDESTRIAN_COLLISION_X = 26;
     private static final double PEDESTRIAN_COLLISION_Y = 24;
 
-    private static final double POLICE_CHASE_TIME = 5.0;
+    private static final double POLICE_CHASE_TIME = 8.0;
     private static final int POLICE_CRASH_FINE = 30;
+    private static final int MAX_POLICE_CARS = 6;
+    private static final double POLICE_CATCH_X = 30;
+    private static final double POLICE_CATCH_Y = 52;
+
+    private static final double AI_SPEED_UP_DISTANCE = 500.0;
+    private static final double SAME_DIR_SPEED_BONUS_AFTER_5000 = 85.0;
+    private static final double OPPOSITE_SPEED_BONUS_AFTER_5000 = 95.0;
+
+    private static final int MAX_TRASH_OBSTACLES = 12;
+    private static final double TRASH_W = 32;
+    private static final double TRASH_H = 38;
+    private static final double TRASH_COLLISION_X = 28;
+    private static final double TRASH_COLLISION_Y = 36;
+    private static final double TRASH_SPAWN_AHEAD_MIN = 240;
+    private static final double TRASH_SPAWN_AHEAD_MAX = 720;
+
+    private static final double TRASH_SIDE_START_MARGIN = 34;
+    private static final double TRASH_SIDE_SPEED_MIN = 120;
+    private static final double TRASH_SIDE_SPEED_MAX = 205;
+    private static final double TRASH_PAIR_CHANCE = 0.34;
+
+    private static final double REVERSE_ITEM_W = 28;
+    private static final double REVERSE_ITEM_H = 28;
+    private static final double REVERSE_ITEM_COLLISION_X = 28;
+    private static final double REVERSE_ITEM_COLLISION_Y = 30;
+    private static final double REVERSE_ITEM_DURATION = 3.4;
+    private static final double REVERSE_ITEM_SPAWN_MIN = 8.0;
+    private static final double REVERSE_ITEM_SPAWN_MAX = 13.0;
 
     private static final int MAX_SKILL_USES = 2;
     private static final double EMP_RANGE = 270;
@@ -119,7 +148,7 @@ public class RaceScene implements AppScene {
     private static final double AI_TURN_TRIGGER_MARGIN = 24.0;
     private static final double SIDE_MERGE_SAFE_GAP = 130.0;
     private static final double SIDE_ROAD_OPENING_OVERLAP = 16.0;
-
+    private final LeaderboardDAO leaderboardDAO = new LeaderboardDAO();
     private enum AiMoveMode {
         MAIN_ROAD,
         TURN_OUT_RIGHT,
@@ -155,9 +184,11 @@ public class RaceScene implements AppScene {
 
     private final List<AiCar> aiCars = new ArrayList<>();
     private final List<Pedestrian> pedestrians = new ArrayList<>();
+    private final List<PoliceUnit> policeUnits = new ArrayList<>();
+    private final List<TrashObstacle> trashObstacles = new ArrayList<>();
+    private final List<ReverseItem> reverseItems = new ArrayList<>();
 
     private final StackPane playerActor;
-    private final StackPane policeActor;
 
     private AnimationTimer timer;
     private long lastFrame = 0L;
@@ -193,16 +224,17 @@ public class RaceScene implements AppScene {
     private double oppositeDirSpawnTimer = 1.8;
     private double sideRoadSpawnTimer = 2.4;
     private double pedestrianSpawnTimer = PEDESTRIAN_SPAWN_INTERVAL;
+    private double trashSpawnTimer = 4.6;
 
     private CityRoadBlock monitoredTrafficBlock;
     private boolean redStopSatisfied = false;
     private boolean redViolationTriggered = false;
+    private int redViolationCount = 0;
 
-    private boolean policeActive = false;
-    private double policeChaseRemaining = 0;
-    private double policeX = laneCenter(2);
-    private double policeY = VIEW_H + 70;
     private double policeSirenTimer = 0;
+    private boolean reverseControlActive = false;
+    private double reverseControlRemaining = 0;
+    private double reverseItemSpawnTimer = 9.0;
 
     private CarId equippedCarId;
     private CarSkill currentSkill;
@@ -251,7 +283,6 @@ public class RaceScene implements AppScene {
         """);
 
         this.playerActor = createPlayerActor(getEquippedCarId(), 1.35, PLAYER_ACTOR_W, PLAYER_ACTOR_H);
-        this.policeActor = createPoliceActor(1.30, POLICE_ACTOR_W, POLICE_ACTOR_H);
 
         BorderPane root = new BorderPane();
         root.setStyle("""
@@ -356,19 +387,22 @@ public class RaceScene implements AppScene {
         monitoredTrafficBlock = null;
         redStopSatisfied = false;
         redViolationTriggered = false;
+        redViolationCount = 0;
 
-        policeActive = false;
-        policeChaseRemaining = 0;
-        policeX = playerX;
-        policeY = VIEW_H + 70;
         policeSirenTimer = 0;
-        policeActor.setVisible(false);
+        reverseControlActive = false;
+        reverseControlRemaining = 0;
+        reverseItemSpawnTimer = randomRange(REVERSE_ITEM_SPAWN_MIN, REVERSE_ITEM_SPAWN_MAX);
+        trashSpawnTimer = 4.6;
 
         loadEquippedSkillData();
         resetSkillState();
         resetPlayerActorCar(equippedCarId);
 
         pedestrians.clear();
+        trashObstacles.clear();
+        reverseItems.clear();
+        deactivateAllPolice();
         tipLabel.setText(DEFAULT_TIP_TEXT);
         initActors();
         updateHud();
@@ -542,13 +576,10 @@ public class RaceScene implements AppScene {
     private void initActors() {
         actorLayer.getChildren().clear();
         aiCars.clear();
+        policeUnits.clear();
 
         actorLayer.getChildren().add(playerActor);
-        actorLayer.getChildren().add(policeActor);
-
         playerActor.toBack();
-        policeActor.toBack();
-        policeActor.setVisible(false);
 
         for (int i = 0; i < 12; i++) {
             AiCar aiCar = new AiCar(randomAiCarId());
@@ -556,6 +587,14 @@ public class RaceScene implements AppScene {
             aiCar.actor.setVisible(false);
             aiCars.add(aiCar);
             actorLayer.getChildren().add(aiCar.actor);
+        }
+
+        for (int i = 0; i < MAX_POLICE_CARS; i++) {
+            PoliceUnit policeUnit = new PoliceUnit();
+            policeUnit.active = false;
+            policeUnit.actor.setVisible(false);
+            policeUnits.add(policeUnit);
+            actorLayer.getChildren().add(policeUnit.actor);
         }
     }
 
@@ -599,6 +638,8 @@ public class RaceScene implements AppScene {
             updatePlayerState(dt);
             updateTrafficSpawners(dt);
             updatePedestrians(dt);
+            updateTrashObstacles(dt);
+            updateReverseItems(dt);
             updateSkill(dt);
             updateAiCars(dt);
             updatePolice(dt);
@@ -671,8 +712,11 @@ public class RaceScene implements AppScene {
         double maxSpeed = PLAYER_MAX_SPEED + (phantomDashActive ? PHANTOM_SPEED_BOOST : 0);
         playerSpeed = clamp(playerSpeed, 0, maxSpeed);
 
-        boolean leftPressed = isPressed(KeyCode.LEFT, KeyCode.A);
-        boolean rightPressed = isPressed(KeyCode.RIGHT, KeyCode.D);
+        boolean rawLeftPressed = isPressed(KeyCode.LEFT, KeyCode.A);
+        boolean rawRightPressed = isPressed(KeyCode.RIGHT, KeyCode.D);
+
+        boolean leftPressed = reverseControlActive ? rawRightPressed : rawLeftPressed;
+        boolean rightPressed = reverseControlActive ? rawLeftPressed : rawRightPressed;
 
         if (leftPressed && !leftLaneLatch) {
             if (targetLane > 0) {
@@ -705,6 +749,64 @@ public class RaceScene implements AppScene {
         turnSignalBlinkTimer += dt;
     }
 
+
+    private void updateReverseItems(double dt) {
+        Iterator<ReverseItem> iterator = reverseItems.iterator();
+
+        while (iterator.hasNext()) {
+            ReverseItem item = iterator.next();
+            double screenY = worldToScreenY(item.worldDistance);
+
+            if (screenY > VIEW_H + 80) {
+                iterator.remove();
+                continue;
+            }
+
+            if (screenY < -120) {
+                continue;
+            }
+
+            item.spinAngle += item.spinSpeed * dt;
+
+            if (!phantomDashActive && invulnerableTime <= 0) {
+                boolean collideX = Math.abs(item.x - playerX) < REVERSE_ITEM_COLLISION_X;
+                boolean collideY = Math.abs(screenY - PLAYER_Y) < REVERSE_ITEM_COLLISION_Y;
+
+                if (collideX && collideY) {
+                    iterator.remove();
+                    reverseControlActive = true;
+                    reverseControlRemaining = REVERSE_ITEM_DURATION;
+                    tipLabel.setText("Bạn nhặt phải vật phẩm nhiễu! Điều khiển đang bị đảo chiều.");
+                }
+            }
+        }
+
+        if (reverseControlActive) {
+            reverseControlRemaining -= dt;
+            if (reverseControlRemaining <= 0) {
+                reverseControlRemaining = 0;
+                reverseControlActive = false;
+                if (!hasActivePolice() && !tipLabel.getText().startsWith("Đèn đỏ")) {
+                    tipLabel.setText(DEFAULT_TIP_TEXT);
+                }
+            }
+        }
+    }
+
+    private void spawnReverseItem() {
+        if (reverseItems.size() >= 2) {
+            return;
+        }
+
+        ReverseItem item = new ReverseItem();
+        item.lane = random.nextInt(LANE_COUNT);
+        item.x = laneCenter(item.lane);
+        item.worldDistance = playerDistance + randomRange(950, 1650);
+        item.spinAngle = randomRange(0, 360);
+        item.spinSpeed = randomRange(110, 220);
+        reverseItems.add(item);
+    }
+
     private void updateTrafficLightRule(double dt) {
         CityRoadBlock upcomingLightBlock = findUpcomingTrafficLightBlock(650);
 
@@ -712,7 +814,11 @@ public class RaceScene implements AppScene {
             monitoredTrafficBlock = null;
             redStopSatisfied = false;
             redViolationTriggered = false;
-            if (!tipLabel.getText().startsWith("Cảnh sát") && !tipLabel.getText().startsWith("Đèn đỏ")) {
+
+            if (!hasActivePolice()
+                    && !reverseControlActive
+                    && !tipLabel.getText().startsWith("Bạn vượt đèn đỏ")
+                    && !tipLabel.getText().startsWith("Cảnh sát")) {
                 tipLabel.setText(DEFAULT_TIP_TEXT);
             }
             return;
@@ -722,28 +828,29 @@ public class RaceScene implements AppScene {
         double stopLine = getMainRoadStopWorld(upcomingLightBlock, true);
         double delta = stopLine - playerDistance;
 
-        if (state != TrafficLightState.RED) {
-            if (monitoredTrafficBlock == upcomingLightBlock) {
-                monitoredTrafficBlock = null;
-                redStopSatisfied = false;
-                redViolationTriggered = false;
-            }
-            if (!policeActive) {
-                tipLabel.setText(DEFAULT_TIP_TEXT);
-            }
-            return;
-        }
-
         if (monitoredTrafficBlock == null || monitoredTrafficBlock.getIndex() != upcomingLightBlock.getIndex()) {
             monitoredTrafficBlock = upcomingLightBlock;
             redStopSatisfied = false;
             redViolationTriggered = false;
         }
 
-        if (delta <= 180 && delta >= 0) {
+        if (state != TrafficLightState.RED) {
+            if (monitoredTrafficBlock != null && monitoredTrafficBlock.getIndex() == upcomingLightBlock.getIndex()) {
+                redStopSatisfied = false;
+                redViolationTriggered = false;
+            }
+
+            if (!hasActivePolice() && !reverseControlActive) {
+                tipLabel.setText(DEFAULT_TIP_TEXT);
+            }
+            return;
+        }
+
+        if (delta <= 180 && delta >= -20) {
             tipLabel.setText("Đèn đỏ phía trước: phanh và dừng hẳn trước vạch.");
         }
 
+        // Hỗ trợ AI / người chơi giảm tốc khi tới gần vạch
         if (delta > 24 && delta < 115 && playerSpeed > 0) {
             playerSpeed -= 260 * dt;
             if (playerSpeed < 0) {
@@ -751,13 +858,15 @@ public class RaceScene implements AppScene {
             }
         }
 
-        if (delta > 24 && delta < 120 && playerSpeed <= 4) {
+        // Chỉ tính là đã dừng đúng khi còn ở trước vạch
+        if (delta >= 0 && delta < 120 && playerSpeed <= 4) {
             redStopSatisfied = true;
         }
 
-        if (playerDistance >= stopLine + 6 && !redStopSatisfied && !redViolationTriggered) {
+        // Vượt qua vạch khi đèn đỏ mà chưa từng dừng đúng
+        if (delta < -6 && !redStopSatisfied && !redViolationTriggered) {
             redViolationTriggered = true;
-            startPoliceChase();
+            onRedLightViolation();
         }
     }
 
@@ -787,6 +896,24 @@ public class RaceScene implements AppScene {
         if (sideRoadSpawnTimer <= 0) {
             spawnSideRoadAiCar();
             sideRoadSpawnTimer = randomRange(SIDE_ROAD_SPAWN_MIN, SIDE_ROAD_SPAWN_MAX);
+        }
+
+        if (redViolationCount >= 2) {
+            trashSpawnTimer -= dt;
+            if (trashSpawnTimer <= 0) {
+                spawnTrashObstacle();
+                if (random.nextDouble() < TRASH_PAIR_CHANCE) {
+                    spawnTrashObstacle();
+                }
+                double faster = Math.min(redViolationCount - 1, 4) * 0.35;
+                trashSpawnTimer = Math.max(0.75, 3.1 - faster);
+            }
+        }
+
+        reverseItemSpawnTimer -= dt;
+        if (reverseItemSpawnTimer <= 0) {
+            spawnReverseItem();
+            reverseItemSpawnTimer = randomRange(REVERSE_ITEM_SPAWN_MIN, REVERSE_ITEM_SPAWN_MAX);
         }
     }
 
@@ -822,6 +949,77 @@ public class RaceScene implements AppScene {
                 }
             }
         }
+    }
+
+
+    private void updateTrashObstacles(double dt) {
+        Iterator<TrashObstacle> iterator = trashObstacles.iterator();
+
+        while (iterator.hasNext()) {
+            TrashObstacle obstacle = iterator.next();
+
+            obstacle.x += obstacle.vx * dt;
+            obstacle.spinAngle += obstacle.spinSpeed * dt;
+
+            double screenY = worldToScreenY(obstacle.worldDistance);
+            if (screenY > VIEW_H + 80) {
+                iterator.remove();
+                continue;
+            }
+
+            if (screenY < -120) {
+                continue;
+            }
+
+            if (obstacle.x < ROAD_X - 90 || obstacle.x > ROAD_X + ROAD_W + 90) {
+                iterator.remove();
+                continue;
+            }
+
+            if (!phantomDashActive && invulnerableTime <= 0) {
+                boolean collideX = Math.abs(obstacle.x - playerX) < TRASH_COLLISION_X;
+                boolean collideY = Math.abs(screenY - PLAYER_Y) < TRASH_COLLISION_Y;
+
+                if (collideX && collideY) {
+                    iterator.remove();
+                    handleGenericCollision("Bạn đã đâm vào thùng rác!");
+                    break;
+                }
+            }
+        }
+    }
+
+    private void spawnTrashObstacle() {
+        if (trashObstacles.size() >= MAX_TRASH_OBSTACLES) {
+            return;
+        }
+
+        TrashObstacle obstacle = new TrashObstacle();
+        obstacle.fromLeft = random.nextBoolean();
+        obstacle.worldDistance = playerDistance + randomRange(TRASH_SPAWN_AHEAD_MIN, TRASH_SPAWN_AHEAD_MAX);
+        obstacle.x = obstacle.fromLeft ? ROAD_X - TRASH_SIDE_START_MARGIN : ROAD_X + ROAD_W + TRASH_SIDE_START_MARGIN;
+        obstacle.vx = obstacle.fromLeft
+                ? randomRange(TRASH_SIDE_SPEED_MIN, TRASH_SIDE_SPEED_MAX)
+                : -randomRange(TRASH_SIDE_SPEED_MIN, TRASH_SIDE_SPEED_MAX);
+        obstacle.spinAngle = randomRange(-25, 25);
+        obstacle.spinSpeed = obstacle.fromLeft ? randomRange(160, 300) : -randomRange(160, 300);
+        trashObstacles.add(obstacle);
+    }
+
+    private double getSameDirectionAiBonus() {
+        if (playerDistance < AI_SPEED_UP_DISTANCE) {
+            return 0;
+        }
+        double t = clamp((playerDistance - AI_SPEED_UP_DISTANCE) / 5000.0, 0, 1);
+        return SAME_DIR_SPEED_BONUS_AFTER_5000 * (0.65 + t * 0.35);
+    }
+
+    private double getOppositeDirectionAiBonus() {
+        if (playerDistance < AI_SPEED_UP_DISTANCE) {
+            return 0;
+        }
+        double t = clamp((playerDistance - AI_SPEED_UP_DISTANCE) / 5000.0, 0, 1);
+        return OPPOSITE_SPEED_BONUS_AFTER_5000 * (0.65 + t * 0.35);
     }
 
     private void updateSkill(double dt) {
@@ -1033,7 +1231,7 @@ public class RaceScene implements AppScene {
         for (int i = 0; i < sameDirCars.size(); i++) {
             AiCar aiCar = sameDirCars.get(i);
 
-            double relative = playerSpeed - aiCar.speed;
+            double relative = playerSpeed - (aiCar.speed + getSameDirectionAiBonus());
             double nextY = aiCar.screenY + relative * dt;
 
             nextY = clampAiAtRedLight(aiCar, nextY);
@@ -1054,7 +1252,7 @@ public class RaceScene implements AppScene {
         for (int i = 0; i < oppositeCars.size(); i++) {
             AiCar aiCar = oppositeCars.get(i);
 
-            double relative = playerSpeed + aiCar.speed;
+            double relative = playerSpeed + aiCar.speed + getOppositeDirectionAiBonus();
             double nextY = aiCar.screenY + relative * dt;
 
             nextY = clampAiAtRedLight(aiCar, nextY);
@@ -1103,38 +1301,59 @@ public class RaceScene implements AppScene {
     }
 
     private void updatePolice(double dt) {
-        if (!policeActive) {
-            policeActor.setVisible(false);
-            return;
-        }
-
-        policeChaseRemaining -= dt;
         policeSirenTimer += dt;
 
-        double targetX = playerX;
-        double targetY = PLAYER_Y + 108;
+        boolean hadPolice = false;
+        boolean hasPoliceNow = false;
 
-        policeX += (targetX - policeX) * clamp(dt * 4.5, 0, 1);
-        policeY += (targetY - policeY) * clamp(dt * 3.2, 0, 1);
+        for (PoliceUnit policeUnit : policeUnits) {
+            if (!policeUnit.active) {
+                policeUnit.actor.setVisible(false);
+                continue;
+            }
 
-        policeActor.setVisible(true);
+            hadPolice = true;
+            policeUnit.chaseRemaining -= dt;
+            policeUnit.chaseLane = targetLane;
 
-        if (policeChaseRemaining <= 0) {
-            policeActive = false;
-            policeActor.setVisible(false);
-            tipLabel.setText("Bạn đã thoát truy đuổi an toàn. Cảnh sát bỏ cuộc.");
+            double targetLaneX = laneCenter((int) clamp(policeUnit.chaseLane, 0, LANE_COUNT - 1));
+            double targetX = targetLaneX + policeUnit.laneOffset;
+            double targetY = PLAYER_Y + 110 + policeUnit.indexOffset * 62;
+
+            policeUnit.x += (targetX - policeUnit.x) * clamp(dt * 4.2, 0, 1);
+            policeUnit.y += (targetY - policeUnit.y) * clamp(dt * 3.1, 0, 1);
+
+            policeUnit.actor.setVisible(true);
+
+            if (!phantomDashActive && Math.abs(policeUnit.x - playerX) < POLICE_CATCH_X
+                    && Math.abs(policeUnit.y - PLAYER_Y) < POLICE_CATCH_Y) {
+                gameOver("Bạn đã bị cảnh sát bắt vì vượt đèn đỏ!");
+                return;
+            }
+
+            if (policeUnit.chaseRemaining <= 0) {
+                policeUnit.active = false;
+                policeUnit.actor.setVisible(false);
+                continue;
+            }
+
+            hasPoliceNow = true;
+        }
+
+        if (hadPolice && !hasPoliceNow && !reverseControlActive) {
+            tipLabel.setText("Bạn đã thoát truy đuổi an toàn.");
         }
     }
 
     private void handleGenericCollision(String message) {
         hitCount++;
 
-        if (policeActive) {
+        if (hasActivePolice()) {
             applyPoliceCrashPenalty();
         }
 
         if (hitCount >= MAX_HITS) {
-            gameOver();
+            gameOver(message);
             return;
         }
 
@@ -1156,14 +1375,73 @@ public class RaceScene implements AppScene {
         tipLabel.setText("Bạn gây tai nạn khi đang bỏ chạy! Bị phạt -" + POLICE_CRASH_FINE + " coins.");
     }
 
-    private void startPoliceChase() {
-        policeActive = true;
-        policeChaseRemaining = POLICE_CHASE_TIME;
-        policeX = playerX;
-        policeY = VIEW_H + 80;
-        policeSirenTimer = 0;
-        policeActor.setVisible(true);
-        tipLabel.setText("Cảnh sát đang truy đuổi vì vượt đèn đỏ! Sống sót 5 giây để thoát.");
+    private void onRedLightViolation() {
+        redViolationCount++;
+
+        int spawnCount = Math.min(redViolationCount, MAX_POLICE_CARS);
+        while (countActivePolice() < spawnCount) {
+            spawnPoliceCar();
+        }
+
+        if (redViolationCount >= 2) {
+            spawnTrashObstacle();
+            if (random.nextDouble() < TRASH_PAIR_CHANCE) {
+                spawnTrashObstacle();
+            }
+        }
+
+        tipLabel.setText("Bạn vượt đèn đỏ! Cảnh sát đang truy đuổi: " + countActivePolice() + " xe.");
+    }
+
+    private void spawnPoliceCar() {
+        PoliceUnit policeUnit = findInactivePoliceUnit();
+        if (policeUnit == null) {
+            return;
+        }
+
+        int activeCount = countActivePolice();
+        policeUnit.active = true;
+        policeUnit.chaseRemaining = POLICE_CHASE_TIME + activeCount * 0.7;
+        policeUnit.chaseLane = targetLane;
+        policeUnit.indexOffset = activeCount;
+
+        double[] offsets = {0, -46, 46, -72, 72, 0};
+        policeUnit.laneOffset = offsets[Math.min(activeCount, offsets.length - 1)];
+
+        policeUnit.x = clamp(playerX + policeUnit.laneOffset, ROAD_X + 24, ROAD_X + ROAD_W - 24);
+        policeUnit.y = VIEW_H + 100 + activeCount * 48;
+        policeUnit.actor.setVisible(true);
+        policeUnit.actor.toFront();
+    }
+
+    private PoliceUnit findInactivePoliceUnit() {
+        for (PoliceUnit policeUnit : policeUnits) {
+            if (!policeUnit.active) {
+                return policeUnit;
+            }
+        }
+        return null;
+    }
+
+    private int countActivePolice() {
+        int count = 0;
+        for (PoliceUnit policeUnit : policeUnits) {
+            if (policeUnit.active) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean hasActivePolice() {
+        return countActivePolice() > 0;
+    }
+
+    private void deactivateAllPolice() {
+        for (PoliceUnit policeUnit : policeUnits) {
+            policeUnit.active = false;
+            policeUnit.actor.setVisible(false);
+        }
     }
 
     private void spawnAiCar(boolean sameDirection) {
@@ -1184,7 +1462,7 @@ public class RaceScene implements AppScene {
             }
 
             double slowerThanPlayer = playerSpeed - randomRange(70, 150);
-            slot.speed = clamp(slowerThanPlayer, SAME_DIR_MIN_SPEED, SAME_DIR_MAX_SPEED);
+            slot.speed = clamp(slowerThanPlayer, SAME_DIR_MIN_SPEED, SAME_DIR_MAX_SPEED) + getSameDirectionAiBonus() * 0.35;
 
             slot.lane = random.nextBoolean() ? 2 : 3;
             maybeAssignMainRoadTurn(slot);
@@ -1196,7 +1474,7 @@ public class RaceScene implements AppScene {
             slot.screenY = 90 + random.nextInt(130);
             ensureSameDirectionGap(slot);
         } else {
-            slot.speed = randomRange(OPPOSITE_DIR_MIN_SPEED, OPPOSITE_DIR_MAX_SPEED);
+            slot.speed = randomRange(OPPOSITE_DIR_MIN_SPEED, OPPOSITE_DIR_MAX_SPEED) + getOppositeDirectionAiBonus() * 0.35;
 
             slot.lane = random.nextBoolean() ? 0 : 1;
             maybeAssignMainRoadTurn(slot);
@@ -1401,8 +1679,8 @@ public class RaceScene implements AppScene {
         slot.sameDirection = toUp;
         slot.lane = targetLane;
         slot.speed = toUp
-                ? randomRange(SAME_DIR_MIN_SPEED, SAME_DIR_MAX_SPEED)
-                : randomRange(OPPOSITE_DIR_MIN_SPEED, OPPOSITE_DIR_MAX_SPEED);
+                ? randomRange(SAME_DIR_MIN_SPEED, SAME_DIR_MAX_SPEED) + getSameDirectionAiBonus() * 0.25
+                : randomRange(OPPOSITE_DIR_MIN_SPEED, OPPOSITE_DIR_MAX_SPEED) + getOppositeDirectionAiBonus() * 0.25;
         slot.resetRouteState();
 
         slot.x = fromRight ? VIEW_W + 132 : -132;
@@ -1664,7 +1942,7 @@ public class RaceScene implements AppScene {
     }
 
     private CityRoadBlock findUpcomingTrafficLightBlock(double maxAheadDistance) {
-        List<CityRoadBlock> blocks = cityRoadGenerator.getVisibleBlocks(playerDistance, 0, maxAheadDistance);
+        List<CityRoadBlock> blocks = cityRoadGenerator.getVisibleBlocks(playerDistance, 250, maxAheadDistance);
         CityRoadBlock best = null;
         double bestDelta = Double.MAX_VALUE;
 
@@ -1672,10 +1950,15 @@ public class RaceScene implements AppScene {
             if (!block.hasTrafficLight()) {
                 continue;
             }
-            double delta = block.getStartDistance() - playerDistance;
-            if (delta < -40 || delta > maxAheadDistance) {
+
+            double stopWorld = getMainRoadStopWorld(block, true);
+            double delta = stopWorld - playerDistance;
+
+            // Cho phép block vẫn được theo dõi cả khi xe vừa mới vượt vạch một đoạn
+            if (delta < -80 || delta > maxAheadDistance) {
                 continue;
             }
+
             if (delta < bestDelta) {
                 bestDelta = delta;
                 best = block;
@@ -1684,7 +1967,6 @@ public class RaceScene implements AppScene {
 
         return best;
     }
-
     private void redraw() {
         drawWorld();
         positionActors();
@@ -1733,8 +2015,11 @@ public class RaceScene implements AppScene {
         drawCityRoadFeatures(gc);
         drawDirectionalHints(gc, laneW);
         drawPedestrianActors(gc);
+        drawTrashObstacles(gc);
+        drawReverseItems(gc);
         drawPlayerTurnSignals(gc);
         drawPoliceSirenEffect(gc);
+        drawRaceWarnings(gc);
         drawStartAndFinishLines(gc);
     }
 
@@ -2309,6 +2594,61 @@ public class RaceScene implements AppScene {
         gc.strokeLine(x, y + 6 * scale, x + 4 * scale, y + 12 * scale);
     }
 
+
+    private void drawTrashObstacles(GraphicsContext gc) {
+        for (TrashObstacle obstacle : trashObstacles) {
+            double y = worldToScreenY(obstacle.worldDistance);
+
+            if (y < -80 || y > VIEW_H + 80) {
+                continue;
+            }
+
+            gc.save();
+            gc.translate(obstacle.x, y);
+            gc.rotate(obstacle.spinAngle);
+
+            gc.setFill(Color.web("#5e6a73"));
+            gc.fillRoundRect(-TRASH_W / 2.0, -TRASH_H / 2.0 + 6, TRASH_W, TRASH_H - 6, 6, 6);
+
+            gc.setFill(Color.web("#79c267"));
+            gc.fillRoundRect(-TRASH_W / 2.0 + 2, -TRASH_H / 2.0, TRASH_W - 4, 8, 4, 4);
+
+            gc.setStroke(Color.rgb(0, 0, 0, 0.35));
+            gc.setLineWidth(1.0);
+            gc.strokeRoundRect(-TRASH_W / 2.0, -TRASH_H / 2.0 + 6, TRASH_W, TRASH_H - 6, 6, 6);
+            gc.restore();
+        }
+    }
+
+    private void drawReverseItems(GraphicsContext gc) {
+        for (ReverseItem item : reverseItems) {
+            double y = worldToScreenY(item.worldDistance);
+
+            if (y < -70 || y > VIEW_H + 70) {
+                continue;
+            }
+
+            gc.save();
+            gc.translate(item.x, y);
+            gc.rotate(item.spinAngle);
+
+            gc.setFill(Color.web("#8b2cf5"));
+            gc.fillOval(-REVERSE_ITEM_W / 2.0, -REVERSE_ITEM_H / 2.0, REVERSE_ITEM_W, REVERSE_ITEM_H);
+
+            gc.setStroke(Color.WHITE);
+            gc.setLineWidth(2.2);
+            gc.strokeOval(-REVERSE_ITEM_W / 2.0, -REVERSE_ITEM_H / 2.0, REVERSE_ITEM_W, REVERSE_ITEM_H);
+
+            gc.setStroke(Color.web("#f5d0fe"));
+            gc.setLineWidth(2.4);
+            gc.strokeLine(-7, -1, 7, -1);
+            gc.strokeLine(-7, 3, 7, 3);
+            gc.strokeLine(-7, -1, -2, -7);
+            gc.strokeLine(7, 3, 2, 9);
+            gc.restore();
+        }
+    }
+
     private void drawPlayerTurnSignals(GraphicsContext gc) {
         if (turnSignalDirection == 0) {
             return;
@@ -2333,18 +2673,74 @@ public class RaceScene implements AppScene {
     }
 
     private void drawPoliceSirenEffect(GraphicsContext gc) {
-        if (!policeActive || !policeActor.isVisible()) {
+        boolean blink = ((int) (policeSirenTimer * 8)) % 2 == 0;
+
+        for (PoliceUnit policeUnit : policeUnits) {
+            if (!policeUnit.active || !policeUnit.actor.isVisible()) {
+                continue;
+            }
+
+            double baseY = policeUnit.y - 28;
+
+            gc.setFill(blink ? Color.web("#ff4d4f") : Color.rgb(255, 77, 79, 0.35));
+            gc.fillOval(policeUnit.x - 14, baseY, 9, 6);
+
+            gc.setFill(blink ? Color.web("#4da6ff") : Color.rgb(77, 166, 255, 0.35));
+            gc.fillOval(policeUnit.x + 5, baseY, 9, 6);
+        }
+    }
+    private void drawRaceWarnings(GraphicsContext gc) {
+        List<String> warnings = new ArrayList<>();
+
+        if (countActivePolice() > 0) {
+            warnings.add("CẢNH SÁT ĐANG TRUY ĐUỔI!");
+        }
+
+        if (reverseControlActive) {
+            warnings.add("ĐIỀU KHIỂN BỊ ĐẢO!");
+        }
+
+        if (playerDistance >= AI_SPEED_UP_DISTANCE) {
+            warnings.add("AI ĐANG TĂNG TỐC!");
+        }
+
+        if (redViolationCount >= 2) {
+            warnings.add("CẨN THẬN: THÙNG RÁC CÓ THỂ VĂNG RA!");
+        }
+
+        if (warnings.isEmpty()) {
             return;
         }
 
-        boolean blink = ((int) (policeSirenTimer * 8)) % 2 == 0;
-        double baseY = policeY - 28;
+        double x = 18;
+        double y = 34;
 
-        gc.setFill(blink ? Color.web("#ff4d4f") : Color.rgb(255, 77, 79, 0.35));
-        gc.fillOval(policeX - 14, baseY, 9, 6);
+        gc.setFont(Font.font(16));
 
-        gc.setFill(blink ? Color.web("#4da6ff") : Color.rgb(77, 166, 255, 0.35));
-        gc.fillOval(policeX + 5, baseY, 9, 6);
+        for (String warning : warnings) {
+            double w = Math.max(220, warning.length() * 8.6);
+            double h = 28;
+
+            gc.setFill(Color.rgb(15, 23, 42, 0.72));
+            gc.fillRoundRect(x, y - 18, w, h, 12, 12);
+
+            gc.setStroke(Color.rgb(255, 255, 255, 0.28));
+            gc.setLineWidth(1.2);
+            gc.strokeRoundRect(x, y - 18, w, h, 12, 12);
+
+            if (warning.contains("CẢNH SÁT")) {
+                gc.setFill(Color.web("#ff5a5f"));
+            } else if (warning.contains("ĐẢO")) {
+                gc.setFill(Color.web("#d946ef"));
+            } else if (warning.contains("AI")) {
+                gc.setFill(Color.web("#f59e0b"));
+            } else {
+                gc.setFill(Color.web("#22c55e"));
+            }
+
+            gc.fillText(warning, x + 12, y);
+            y += 34;
+        }
     }
 
     private void drawStartAndFinishLines(GraphicsContext gc) {
@@ -2406,12 +2802,6 @@ public class RaceScene implements AppScene {
 
     private void positionActors() {
         setActorPosition(playerActor, playerX, PLAYER_Y, PLAYER_ACTOR_W, PLAYER_ACTOR_H, 1.0);
-        playerActor.toFront();
-
-        if (policeActive) {
-            setActorPosition(policeActor, policeX, policeY, POLICE_ACTOR_W, POLICE_ACTOR_H, 1.0);
-            policeActor.toFront();
-        }
 
         for (AiCar aiCar : aiCars) {
             aiCar.actor.setVisible(aiCar.active && aiCar.screenY > -180 && aiCar.screenY < VIEW_H + 150);
@@ -2422,12 +2812,16 @@ public class RaceScene implements AppScene {
             }
         }
 
-        if (policeActive) {
-            policeActor.toFront();
-            playerActor.toFront();
-        } else {
-            playerActor.toFront();
+        for (PoliceUnit policeUnit : policeUnits) {
+            policeUnit.actor.setVisible(policeUnit.active);
+
+            if (policeUnit.active) {
+                setActorPosition(policeUnit.actor, policeUnit.x, policeUnit.y, POLICE_ACTOR_W, POLICE_ACTOR_H, 1.0);
+                policeUnit.actor.toFront();
+            }
         }
+
+        playerActor.toFront();
     }
 
     private void setActorPosition(StackPane actor, double centerX, double centerY,
@@ -2466,9 +2860,20 @@ public class RaceScene implements AppScene {
             drawMiniDot(gc, w / 2.0, miniY(aiDistance, h), aiCar.sameDirection ? Color.web("#7dd3fc") : Color.web("#fbbf24"), 4.2);
         }
 
-        if (policeActive) {
-            double policeDistance = clamp(playerDistance + (PLAYER_Y - policeY) * 6.0, 0, currentTrackLength);
+        for (PoliceUnit policeUnit : policeUnits) {
+            if (!policeUnit.active) {
+                continue;
+            }
+            double policeDistance = clamp(playerDistance + (PLAYER_Y - policeUnit.y) * 6.0, 0, currentTrackLength);
             drawMiniDot(gc, w / 2.0, miniY(policeDistance, h), Color.web("#ff4d4f"), 5);
+        }
+
+        for (TrashObstacle obstacle : trashObstacles) {
+            drawMiniDot(gc, w / 2.0, miniY(obstacle.worldDistance, h), Color.web("#a3e635"), 3.8);
+        }
+
+        for (ReverseItem item : reverseItems) {
+            drawMiniDot(gc, w / 2.0, miniY(item.worldDistance, h), Color.web("#d946ef"), 4.0);
         }
 
         gc.setFill(Color.WHITE);
@@ -2486,7 +2891,7 @@ public class RaceScene implements AppScene {
         speedLabel.setText("Tốc độ: " + (int) playerSpeed + " km/h");
         distanceLabel.setText("Quãng đường: " + (int) playerDistance + " / " + (int) currentTrackLength + " km");
         mapLabel.setText("Map: " + mapDisplayName());
-        crashLabel.setText("Va chạm: " + hitCount + " / " + MAX_HITS);
+        crashLabel.setText("Va chạm: " + hitCount + " / " + MAX_HITS + "   •   Vượt đèn: " + redViolationCount);
 
         skillLabel.setText("Skill: " + currentSkillDisplayName());
 
@@ -2497,6 +2902,13 @@ public class RaceScene implements AppScene {
             stateText = "Hồi chiêu " + formatSeconds(skillCooldownRemaining) + " • còn " + skillUsesRemaining + " lượt";
         } else {
             stateText = "Sẵn sàng • còn " + skillUsesRemaining + " lượt";
+        }
+
+        if (countActivePolice() > 0) {
+            stateText += " • Cảnh sát: " + countActivePolice();
+        }
+        if (reverseControlActive) {
+            stateText += " • Đảo điều khiển";
         }
         skillStateLabel.setText(stateText);
     }
@@ -2513,6 +2925,10 @@ public class RaceScene implements AppScene {
             timer.stop();
         }
 
+        playerSpeed = 0;
+        playerActor.setOpacity(1.0);
+        playerActor.setStyle("");
+
         try {
             game.getPlayerProfile().addCoins(300);
         } catch (Exception ignored) {
@@ -2523,17 +2939,22 @@ public class RaceScene implements AppScene {
         } catch (Exception ignored) {
         }
 
+        saveTopDistance();
+
         Platform.runLater(() -> {
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Về đích");
             alert.setHeaderText("Bạn đã hoàn thành chặng đua " + mapDisplayName() + "!");
-            alert.setContentText("Thưởng: +300 coin");
+            alert.setContentText("Thưởng: +300 coin\n\n" + buildTopKmContent());
             alert.showAndWait();
             tryGoMenu();
         });
     }
-
     private void gameOver() {
+        gameOver("Bạn đã va chạm quá số lần cho phép!");
+    }
+
+    private void gameOver(String reason) {
         if (finished || finishDialogShown) {
             return;
         }
@@ -2548,17 +2969,97 @@ public class RaceScene implements AppScene {
         playerSpeed = 0;
         playerActor.setOpacity(1.0);
         playerActor.setStyle("");
+        deactivateAllPolice();
+        saveTopDistance();
 
         Platform.runLater(() -> {
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Game Over");
-            alert.setHeaderText("Bạn đã va chạm quá số lần cho phép!");
-            alert.setContentText("Hãy thử lại nhé!");
+            alert.setHeaderText(reason);
+            alert.setContentText("Quãng đường đạt được: " + (int) playerDistance + " km\n\n" + buildTopKmContent());
             alert.showAndWait();
             tryGoMenu();
         });
     }
 
+    private void saveTopDistance() {
+        try {
+            leaderboardDAO.saveBestDistance(resolvePlayerName(), playerDistance);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String buildTopKmContent() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("BXH TOÀN SERVER\n");
+
+        List<LeaderboardDAO.Entry> topEntries;
+        try {
+            topEntries = leaderboardDAO.getTop10();
+        } catch (Exception e) {
+            topEntries = new ArrayList<>();
+        }
+
+        if (topEntries.isEmpty()) {
+            sb.append("Chưa có dữ liệu.");
+            return sb.toString();
+        }
+
+        for (int i = 0; i < topEntries.size(); i++) {
+            LeaderboardDAO.Entry entry = topEntries.get(i);
+            sb.append(i + 1)
+                    .append(". ")
+                    .append(entry.username())
+                    .append(" - ")
+                    .append((int) entry.distanceKm())
+                    .append(" km");
+
+            if (i < topEntries.size() - 1) {
+                sb.append("\n");
+            }
+        }
+
+        return sb.toString();
+    }
+    private String resolvePlayerName() {
+        try {
+            String sessionUsername = UserSession.getUsername();
+            if (sessionUsername != null && !sessionUsername.isBlank()) {
+                return sessionUsername.trim();
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            Object profile = game.getPlayerProfile();
+            if (profile != null) {
+                try {
+                    Object value = profile.getClass().getMethod("getUsername").invoke(profile);
+                    if (value != null) {
+                        String text = value.toString().trim();
+                        if (!text.isEmpty()) {
+                            return text;
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+
+                try {
+                    Object value = profile.getClass().getMethod("getPlayerName").invoke(profile);
+                    if (value != null) {
+                        String text = value.toString().trim();
+                        if (!text.isEmpty()) {
+                            return text;
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        return "Player";
+    }
     private StackPane createPlayerActor(CarId carId, double scale, double width, double height) {
         Node carNode = CarViewFactory.createPlayerRaceCar(carId);
         carNode.setScaleX(scale);
@@ -2782,6 +3283,39 @@ public class RaceScene implements AppScene {
         gc.setFill(Color.rgb(42, 152, 78, 0.85));
         gc.fillOval(x - 10 * scale, y - 12 * scale, 20 * scale, 18 * scale);
         gc.fillOval(x - 14 * scale, y - 4 * scale, 28 * scale, 16 * scale);
+    }
+
+
+    private final class PoliceUnit {
+        private boolean active;
+        private double x;
+        private double y;
+        private double chaseRemaining;
+        private int chaseLane;
+        private int indexOffset;
+        private double laneOffset;
+        private final StackPane actor;
+
+        private PoliceUnit() {
+            this.actor = createPoliceActor(1.18, POLICE_ACTOR_W, POLICE_ACTOR_H);
+        }
+    }
+
+    private static final class TrashObstacle {
+        private double x;
+        private double worldDistance;
+        private boolean fromLeft;
+        private double vx;
+        private double spinAngle;
+        private double spinSpeed;
+    }
+
+    private static final class ReverseItem {
+        private int lane;
+        private double x;
+        private double worldDistance;
+        private double spinAngle;
+        private double spinSpeed;
     }
 
     private final class AiCar {

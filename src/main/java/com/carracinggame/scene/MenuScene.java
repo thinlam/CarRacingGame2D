@@ -369,11 +369,9 @@ public class MenuScene implements AppScene {
         infoRow.setAlignment(Pos.CENTER);
         infoRow.getChildren().addAll(
                 buildHudInfoCard("EQUIPPED", equippedCarValue, "#ffb14a"),
-                buildHudInfoCard("PILOT", playerBannerValue, "#47d7ff")
-
-
+                buildHudInfoCard("PILOT", playerBannerValue, "#47d7ff"),
+                buildHudInfoCard("SELECTED MAP", selectedMapValue, "#18d486")
         );
-
         showroomCard.getChildren().addAll(header, displayRow, infoRow);
         center.getChildren().add(showroomCard);
 
@@ -488,54 +486,58 @@ public class MenuScene implements AppScene {
         dock.setPrefWidth(240);
         dock.setPadding(new Insets(14, 14, 14, 14));
         dock.setStyle("""
-            -fx-background-color:
-                linear-gradient(to bottom, rgba(7,16,31,0.95), rgba(6,12,24,0.96));
-            -fx-background-radius: 24;
-            -fx-border-color: rgba(255,255,255,0.08);
-            -fx-border-width: 1.1;
-            -fx-border-radius: 24;
-            -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.34), 16, 0, 0, 8);
-        """);
+        -fx-background-color:
+            linear-gradient(to bottom, rgba(7,16,31,0.95), rgba(6,12,24,0.96));
+        -fx-background-radius: 24;
+        -fx-border-color: rgba(255,255,255,0.08);
+        -fx-border-width: 1.1;
+        -fx-border-radius: 24;
+        -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.34), 16, 0, 0, 8);
+    """);
 
         Label title = new Label("CONTROL PANEL");
         title.setStyle("""
-            -fx-font-size: 18px;
-            -fx-font-weight: 900;
-            -fx-text-fill: white;
-        """);
+        -fx-font-size: 18px;
+        -fx-font-weight: 900;
+        -fx-text-fill: white;
+    """);
 
         Label sub = new Label("Các thao tác nhanh trong game");
         sub.setStyle("""
-            -fx-font-size: 10px;
-            -fx-font-weight: 700;
-            -fx-text-fill: #7f97b2;
-        """);
+        -fx-font-size: 10px;
+        -fx-font-weight: 700;
+        -fx-text-fill: #7f97b2;
+    """);
 
         Region line = new Region();
         line.setPrefHeight(1);
         line.setMaxWidth(Double.MAX_VALUE);
         line.setStyle("""
-            -fx-background-color: rgba(255,255,255,0.08);
-        """);
+        -fx-background-color: rgba(255,255,255,0.08);
+    """);
 
         Button btnStart = bigAction("START RACE", "#10d37f", "#0a8f57");
         Button btnShop = bigAction("SHOP", "#3aa7ff", "#226dd8");
         Button btnGarage = bigAction("GARAGE", "#ff9d3c", "#d86a1f");
+        Button btnLeaderboard = bigAction("BẢNG XẾP HẠNG", "#f5b041", "#d68910");
         Button btnBonus = bigAction("DAILY REWARD", "#9b6dff", "#6e49d8");
         Button btnLogout = bigAction("LOG OUT", "#ff6d6d", "#d44444");
 
         btnStart.setOnAction(e -> game.switchState(GameState.MAP_SELECT));
         btnShop.setOnAction(e -> game.switchState(GameState.SHOP));
         btnGarage.setOnAction(e -> game.switchState(GameState.GARAGE));
+        btnLeaderboard.setOnAction(e -> game.showLeaderboard());
         btnBonus.setOnAction(e -> openDailyCheckInDialog());
         btnLogout.setOnAction(e -> logout());
 
-        dock.getChildren().addAll(title, sub, line, btnStart, btnShop, btnGarage, btnBonus, btnLogout);
+        dock.getChildren().addAll(
+                title, sub, line,
+                btnStart, btnShop, btnGarage, btnLeaderboard, btnBonus, btnLogout
+        );
         wrapper.getChildren().add(dock);
 
         return wrapper;
     }
-
     private Node buildBottomNav() {
         HBox bottom = new HBox(10);
         bottom.setAlignment(Pos.CENTER_LEFT);
@@ -545,25 +547,27 @@ public class MenuScene implements AppScene {
         dock.setAlignment(Pos.CENTER_LEFT);
         dock.setPadding(new Insets(10, 12, 10, 12));
         dock.setStyle("""
-            -fx-background-color:
-                linear-gradient(to bottom, rgba(7,16,31,0.95), rgba(6,12,24,0.96));
-            -fx-background-radius: 22;
-            -fx-border-color: rgba(255,255,255,0.08);
-            -fx-border-radius: 22;
-            -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.28), 16, 0, 0, 8);
-        """);
+        -fx-background-color:
+            linear-gradient(to bottom, rgba(7,16,31,0.95), rgba(6,12,24,0.96));
+        -fx-background-radius: 22;
+        -fx-border-color: rgba(255,255,255,0.08);
+        -fx-border-radius: 22;
+        -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.28), 16, 0, 0, 8);
+    """);
 
         Button home = navBtn("HOME");
         Button shop = navBtn("SHOP");
         Button garage = navBtn("GARAGE");
         Button map = navBtn("MAP SELECT");
+        Button leaderboard = navBtn("BXH");
 
         home.setOnAction(e -> refreshData());
         shop.setOnAction(e -> game.switchState(GameState.SHOP));
         garage.setOnAction(e -> game.switchState(GameState.GARAGE));
         map.setOnAction(e -> game.switchState(GameState.MAP_SELECT));
+        leaderboard.setOnAction(e -> game.showLeaderboard());
 
-        dock.getChildren().addAll(home, shop, garage, map);
+        dock.getChildren().addAll(home, shop, garage, map, leaderboard);
         bottom.getChildren().add(dock);
 
         return bottom;

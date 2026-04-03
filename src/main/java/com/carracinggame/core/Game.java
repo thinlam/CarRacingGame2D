@@ -16,6 +16,7 @@ import javafx.stage.Stage;
 import com.carracinggame.car.CarDefinition;
 import com.carracinggame.car.CarId;
 import com.carracinggame.scene.UpgradeScene;
+import com.carracinggame.scene.LeaderboardScene;
 public class Game {
 
     private final Stage stage;
@@ -123,6 +124,30 @@ public class Game {
     public void openUpgradeScene(CarId carId) {
         this.selectedUpgradeCarId = carId;
         goTo(GameState.UPGRADE);
+    }
+    public void showLeaderboard() {
+        try {
+            if (currentScene != null) {
+                currentScene.onHide();
+            }
+        } catch (Exception ignored) {
+        }
+
+        currentScene = new LeaderboardScene(this);
+        stage.setScene(currentScene.getScene());
+        currentScene.onShow();
+    }
+    public void showMenu() {
+        try {
+            goTo(GameState.MENU);
+            return;
+        } catch (Exception ignored) {
+        }
+
+        try {
+            switchState(GameState.MENU);
+        } catch (Exception ignored) {
+        }
     }
 
     public CarDefinition getUpgradeCarDefinition() {
