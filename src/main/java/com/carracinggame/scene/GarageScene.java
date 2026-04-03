@@ -2,6 +2,7 @@ package com.carracinggame.scene;
 
 import com.carracinggame.car.CarDefinition;
 import com.carracinggame.car.CarId;
+import com.carracinggame.car.CarSkill;
 import com.carracinggame.core.Game;
 import com.carracinggame.core.GameConfig;
 import com.carracinggame.core.GameState;
@@ -23,8 +24,6 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
-import java.lang.reflect.Method;
-
 public class GarageScene implements AppScene {
 
     private final Game game;
@@ -42,7 +41,7 @@ public class GarageScene implements AppScene {
         title.setFont(Font.font("Arial", FontWeight.EXTRA_BOLD, 32));
         title.setTextFill(Color.WHITE);
 
-        messageLabel = new Label("Chọn xe đang dùng cho Race hoặc vào trang nâng cấp xe.");
+        messageLabel = new Label("Chọn xe đang dùng hoặc vào nâng cấp skill cho xe.");
         messageLabel.setTextFill(Color.web("#dbeafe"));
         messageLabel.setFont(Font.font(16));
 
@@ -73,7 +72,12 @@ public class GarageScene implements AppScene {
         root.setTop(topBox);
         root.setCenter(scrollPane);
         root.setBottom(bottomBox);
-        root.setStyle("-fx-background-color: linear-gradient(to bottom, #111827, #0f172a 55%, #0f766e);");
+        root.setStyle("""
+                -fx-background-color:
+                    radial-gradient(center 18% 12%, radius 45%, rgba(59,130,246,0.16), transparent 60%),
+                    radial-gradient(center 85% 18%, radius 35%, rgba(16,185,129,0.14), transparent 62%),
+                    linear-gradient(to bottom, #111827, #0f172a 55%, #0b1220 100%);
+                """);
 
         this.scene = new Scene(root, GameConfig.WIDTH, GameConfig.HEIGHT);
         refresh();
@@ -82,16 +86,16 @@ public class GarageScene implements AppScene {
     private void refresh() {
         listContainer.getChildren().clear();
 
-        String username = resolveUsername();
-
         for (CarDefinition car : garageService.getOwnedCarDefinitions()) {
             boolean equipped = garageService.getEquippedCar() != null
                     && garageService.getEquippedCar().getId() == car.getId();
 
-            UpgradeScene.UpgradeData upgradeData =
-                    UpgradeScene.getUpgradeData(username, car.getId());
+            CarSkill skill = car.getSkill();
+            int skillLevel = UpgradeScene.getSkillLevel(game, car.getId());
+            double upgradedDuration = UpgradeScene.getUpgradedSkillDuration(game, car.getId());
+            double bonusDuration = UpgradeScene.getExtraSkillSeconds(game, car.getId());
 
-            Node preview = createCarPreview(car.getId(), upgradeData);
+            Node preview = createCarPreview(car.getId());
 
             Label name = new Label(car.getName());
             name.setTextFill(Color.WHITE);
@@ -104,18 +108,29 @@ public class GarageScene implements AppScene {
             status.setTextFill(equipped ? Color.web("#86efac") : Color.web("#cbd5e1"));
             status.setFont(Font.font("Arial", FontWeight.BOLD, 15));
 
-            Label paintInfo = new Label("Màu sơn: " + upgradeData.getPaintName());
-            paintInfo.setTextFill(Color.web("#93c5fd"));
-            paintInfo.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 14));
+            Label skillName = new Label("Skill: " + skill.name() + " • " + skill.shortLabel());
+            skillName.setTextFill(Color.web(skill.accentColor()));
+            skillName.setFont(Font.font("Arial", FontWeight.BOLD, 15));
 
-            Label decalInfo = new Label("Decal: " + upgradeData.getDecalName());
-            decalInfo.setTextFill(Color.web("#f9a8d4"));
-            decalInfo.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 14));
+            Label skillInfo = new Label(
+                    "Cấp skill: " + skillLevel +
+                            "   |   Gốc: " + formatSeconds(skill.activeSeconds()) +
+                            "   |   Cộng thêm: +" + formatSeconds(bonusDuration) +
+                            "   |   Khi đua: " + formatSeconds(upgradedDuration)
+            );
+            skillInfo.setTextFill(Color.web("#93c5fd"));
+            skillInfo.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 14));
+            skillInfo.setWrapText(true);
 
-            VBox infoBox = new VBox(6, name, stats, status, paintInfo, decalInfo);
+            Label cooldownInfo = new Label("Hồi chiêu: " + formatSeconds(skill.cooldownSeconds()));
+            cooldownInfo.setTextFill(Color.web("#c4b5fd"));
+            cooldownInfo.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 14));
+
+            VBox infoBox = new VBox(6, name, stats, status, skillName, skillInfo, cooldownInfo);
             infoBox.setAlignment(Pos.CENTER_LEFT);
+            infoBox.setMaxWidth(620);
 
-            Button upgradeButton = new Button("Nâng cấp xe");
+            Button upgradeButton = new Button("Nâng cấp skill");
             upgradeButton.setFont(Font.font("Arial", FontWeight.BOLD, 16));
             upgradeButton.setTextFill(Color.WHITE);
             upgradeButton.setMinWidth(150);
@@ -149,54 +164,39 @@ public class GarageScene implements AppScene {
             HBox card = new HBox(18, preview, infoBox, spacer, buttonBox);
             card.setAlignment(Pos.CENTER_LEFT);
             card.setPadding(new Insets(18));
-            card.setStyle("-fx-background-color: rgba(15,23,42,0.55); -fx-background-radius: 18;");
+            card.setStyle("""
+                    -fx-background-color: rgba(15,23,42,0.58);
+                    -fx-background-radius: 18;
+                    -fx-border-color: rgba(255,255,255,0.08);
+                    -fx-border-radius: 18;
+                    """);
 
             listContainer.getChildren().add(card);
         }
     }
 
-    private Node createCarPreview(CarId carId, UpgradeScene.UpgradeData upgradeData) {
+    private Node createCarPreview(CarId carId) {
         StackPane previewBox = new StackPane();
         previewBox.setPrefSize(190, 110);
         previewBox.setMinSize(190, 110);
         previewBox.setMaxSize(190, 110);
         previewBox.setStyle("""
-            -fx-background-color: rgba(255,255,255,0.05);
-            -fx-background-radius: 18;
-            -fx-border-color: rgba(255,255,255,0.10);
-            -fx-border-radius: 18;
-        """);
+                -fx-background-color: rgba(255,255,255,0.05);
+                -fx-background-radius: 18;
+                -fx-border-color: rgba(255,255,255,0.10);
+                -fx-border-radius: 18;
+                """);
 
         Node carView = CarViewFactory.createShopPreview(carId);
         carView.setScaleX(0.6);
         carView.setScaleY(0.6);
 
-        CarPaintUtil.applyPaint(carView, upgradeData.getPaintName());
-
         previewBox.getChildren().add(carView);
         return previewBox;
     }
 
-    private String resolveUsername() {
-        try {
-            Object profile = game.getPlayerProfile();
-            if (profile == null) return "guest";
-
-            for (String methodName : new String[]{"getUsername", "getName", "getPlayerName", "getDisplayName"}) {
-                try {
-                    Method method = profile.getClass().getMethod(methodName);
-                    Object value = method.invoke(profile);
-                    if (value != null && !String.valueOf(value).isBlank()) {
-                        return String.valueOf(value);
-                    }
-                } catch (NoSuchMethodException ignored) {
-                }
-            }
-
-            return "guest";
-        } catch (Exception e) {
-            return "guest";
-        }
+    private String formatSeconds(double seconds) {
+        return String.format("%.1fs", seconds);
     }
 
     @Override

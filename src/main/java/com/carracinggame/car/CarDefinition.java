@@ -42,4 +42,8 @@ public class CarDefinition {
     public CarStats getStats() {
         return stats;
     }
+
+    public CarSkill getSkill() {
+        return CarSkill.forCar(id);
+    }
 }

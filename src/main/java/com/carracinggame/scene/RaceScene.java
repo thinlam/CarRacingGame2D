@@ -1,6 +1,7 @@
 package com.carracinggame.scene;
 
 import com.carracinggame.car.CarId;
+import com.carracinggame.car.CarSkill;
 import com.carracinggame.core.Game;
 import com.carracinggame.core.GameState;
 import com.carracinggame.map.MapId;
@@ -18,6 +19,8 @@ import javafx.scene.control.Label;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Line;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 
@@ -39,7 +42,6 @@ public class RaceScene implements AppScene {
 
     private static final double PLAYER_Y = 620;
 
-    // Độ dài từng miền
     private static final double NORTH_TRACK_LENGTH = 15000;
     private static final double CENTRAL_TRACK_LENGTH = 18000;
     private static final double SOUTH_TRACK_LENGTH = 20000;
@@ -62,13 +64,19 @@ public class RaceScene implements AppScene {
     private static final double SAFE_RESPAWN_Y_GAP = 140;
 
     private static final String DEFAULT_TIP_TEXT =
-            "↑/W tăng tốc   •   ↓/S phanh   •   ← → / A D để né xe";
+            "↑/W tăng tốc   •   ↓/S phanh   •   ← → / A D né xe   •   SPACE dùng skill";
+
+    private static final double EMP_PULSE_INTERVAL = 0.25;
+    private static final double EMP_PULSE_RANGE = 260;
+    private static final double EMP_BEAM_LIFETIME = 0.14;
+    private static final double TIME_WARP_FACTOR = 0.55;
 
     private final Game game;
     private final Scene scene;
 
     private final Canvas canvas;
     private final Pane actorLayer;
+    private final Pane effectLayer;
     private final Canvas miniMapCanvas;
 
     private final Label titleLabel;
@@ -76,11 +84,14 @@ public class RaceScene implements AppScene {
     private final Label distanceLabel;
     private final Label mapLabel;
     private final Label crashLabel;
+    private final Label skillLabel;
+    private final Label skillStateLabel;
     private final Label tipLabel;
     private final Label countdownLabel;
 
     private final Set<KeyCode> pressedKeys = new HashSet<>();
     private final List<AiCar> aiCars = new ArrayList<>();
+    private final List<EmpShotEffect> empShotEffects = new ArrayList<>();
     private final Random random = new Random();
 
     private final StackPane playerActor;
@@ -103,6 +114,19 @@ public class RaceScene implements AppScene {
     private int hitCount = 0;
     private double invulnerableTime = 0;
 
+    private CarId equippedCarId;
+    private CarSkill currentSkill;
+    private double upgradedSkillDuration = 0;
+    private double skillCooldownRemaining = 0;
+    private double skillActiveRemaining = 0;
+
+    private boolean phaseDashActive = false;
+    private boolean empFieldActive = false;
+    private boolean timeWarpActive = false;
+
+    private double empPulseTick = 0;
+    private boolean skillKeyLatch = false;
+
     public RaceScene(Game game) {
         this.game = game;
         this.currentTrackLength = resolveTrackLength();
@@ -118,6 +142,15 @@ public class RaceScene implements AppScene {
         Rectangle actorClip = new Rectangle(VIEW_W, VIEW_H);
         actorLayer.setClip(actorClip);
 
+        this.effectLayer = new Pane();
+        this.effectLayer.setPrefSize(VIEW_W, VIEW_H);
+        this.effectLayer.setMinSize(VIEW_W, VIEW_H);
+        this.effectLayer.setMaxSize(VIEW_W, VIEW_H);
+        this.effectLayer.setMouseTransparent(true);
+
+        Rectangle effectClip = new Rectangle(VIEW_W, VIEW_H);
+        effectLayer.setClip(effectClip);
+
         this.miniMapCanvas = new Canvas(120, 160);
 
         this.titleLabel = new Label("RACE - MAP " + mapDisplayName().toUpperCase());
@@ -125,6 +158,8 @@ public class RaceScene implements AppScene {
         this.distanceLabel = new Label();
         this.mapLabel = new Label();
         this.crashLabel = new Label();
+        this.skillLabel = new Label();
+        this.skillStateLabel = new Label();
         this.tipLabel = new Label(DEFAULT_TIP_TEXT);
 
         this.countdownLabel = new Label("3");
@@ -164,7 +199,7 @@ public class RaceScene implements AppScene {
         frameClip.setArcHeight(28);
         raceFrame.setClip(frameClip);
 
-        raceFrame.getChildren().addAll(canvas, actorLayer, countdownLabel);
+        raceFrame.getChildren().addAll(canvas, actorLayer, effectLayer, countdownLabel);
         raceRoot.getChildren().add(raceFrame);
 
         VBox miniBox = buildMiniMapBox();
@@ -178,9 +213,11 @@ public class RaceScene implements AppScene {
         this.scene = new Scene(root);
 
         configureInput();
+        loadEquippedSkillData();
         initActors();
         initTimer();
         updateHud();
+        refreshPlayerVisualState();
         redraw();
     }
 
@@ -221,13 +258,42 @@ public class RaceScene implements AppScene {
 
         hitCount = 0;
         invulnerableTime = 0;
-        playerActor.setOpacity(1.0);
-        tipLabel.setText(DEFAULT_TIP_TEXT);
 
         pressedKeys.clear();
+
+        loadEquippedSkillData();
+        resetSkillState();
+        resetPlayerActorCar(equippedCarId);
+
+        tipLabel.setText(DEFAULT_TIP_TEXT);
         initActors();
         updateHud();
         redraw();
+    }
+
+    private void loadEquippedSkillData() {
+        equippedCarId = getEquippedCarId();
+        currentSkill = CarSkill.forCar(equippedCarId);
+        upgradedSkillDuration = UpgradeScene.getUpgradedSkillDuration(game, equippedCarId);
+    }
+
+    private void resetSkillState() {
+        skillCooldownRemaining = 0;
+        skillActiveRemaining = 0;
+        phaseDashActive = false;
+        empFieldActive = false;
+        timeWarpActive = false;
+        empPulseTick = 0;
+        skillKeyLatch = false;
+        refreshPlayerVisualState();
+    }
+
+    private void resetPlayerActorCar(CarId carId) {
+        playerActor.getChildren().clear();
+        Node carNode = CarViewFactory.createPlayerRaceCar(carId);
+        carNode.setScaleX(1.35);
+        carNode.setScaleY(1.35);
+        playerActor.getChildren().add(carNode);
     }
 
     private Node buildTopBar() {
@@ -269,6 +335,18 @@ public class RaceScene implements AppScene {
             -fx-text-fill: #b22222;
         """);
 
+        skillLabel.setStyle("""
+            -fx-font-size: 14px;
+            -fx-font-weight: 900;
+            -fx-text-fill: #214d76;
+        """);
+
+        skillStateLabel.setStyle("""
+            -fx-font-size: 13px;
+            -fx-font-weight: 800;
+            -fx-text-fill: #5b21b6;
+        """);
+
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
@@ -286,7 +364,10 @@ public class RaceScene implements AppScene {
             tryGoMenu();
         });
 
-        top.getChildren().addAll(titleLabel, speedLabel, distanceLabel, mapLabel, crashLabel, spacer, backBtn);
+        top.getChildren().addAll(
+                titleLabel, speedLabel, distanceLabel, mapLabel, crashLabel,
+                skillLabel, skillStateLabel, spacer, backBtn
+        );
         return top;
     }
 
@@ -335,7 +416,9 @@ public class RaceScene implements AppScene {
 
     private void initActors() {
         actorLayer.getChildren().clear();
+        effectLayer.getChildren().clear();
         aiCars.clear();
+        empShotEffects.clear();
 
         actorLayer.getChildren().add(playerActor);
         playerActor.toBack();
@@ -407,6 +490,7 @@ public class RaceScene implements AppScene {
         if (raceStarted) {
             updatePlayerInput(dt);
             updatePlayerState(dt);
+            updateSkill(dt);
             updateAiCars(dt);
             updateInvulnerability(dt);
         } else {
@@ -414,6 +498,7 @@ public class RaceScene implements AppScene {
             updateInvulnerability(dt);
         }
 
+        updateEffects(dt);
         updateHud();
 
         if (playerDistance >= currentTrackLength) {
@@ -450,17 +535,12 @@ public class RaceScene implements AppScene {
     private void updateInvulnerability(double dt) {
         if (invulnerableTime > 0) {
             invulnerableTime -= dt;
-
-            if (invulnerableTime > 0) {
-                boolean blink = ((int) (invulnerableTime * 10)) % 2 == 0;
-                playerActor.setOpacity(blink ? 0.42 : 1.0);
-            } else {
+            if (invulnerableTime <= 0) {
                 invulnerableTime = 0;
-                playerActor.setOpacity(1.0);
             }
-        } else {
-            playerActor.setOpacity(1.0);
         }
+
+        refreshPlayerVisualState();
     }
 
     private void updatePlayerInput(double dt) {
@@ -498,7 +578,187 @@ public class RaceScene implements AppScene {
         roadScroll += playerSpeed * dt;
     }
 
+    private void updateSkill(double dt) {
+        if (currentSkill == null) {
+            return;
+        }
+
+        if (skillCooldownRemaining > 0) {
+            skillCooldownRemaining -= dt;
+            if (skillCooldownRemaining < 0) {
+                skillCooldownRemaining = 0;
+            }
+        }
+
+        boolean spacePressed = pressedKeys.contains(KeyCode.SPACE);
+        if (spacePressed && !skillKeyLatch) {
+            activateSkill();
+        }
+        skillKeyLatch = spacePressed;
+
+        if (skillActiveRemaining > 0) {
+            skillActiveRemaining -= dt;
+
+            if (empFieldActive) {
+                empPulseTick -= dt;
+                while (empPulseTick <= 0) {
+                    empPulseTick += EMP_PULSE_INTERVAL;
+                    fireEmpShotAtNearestAiAhead(EMP_PULSE_RANGE);
+                }
+            }
+
+            if (skillActiveRemaining <= 0) {
+                skillActiveRemaining = 0;
+                phaseDashActive = false;
+                empFieldActive = false;
+                timeWarpActive = false;
+                tipLabel.setText(DEFAULT_TIP_TEXT);
+            }
+        }
+
+        refreshPlayerVisualState();
+    }
+
+    private void activateSkill() {
+        if (currentSkill == null || skillCooldownRemaining > 0 || skillActiveRemaining > 0) {
+            return;
+        }
+
+        skillActiveRemaining = upgradedSkillDuration;
+        skillCooldownRemaining = currentSkill.cooldownSeconds();
+
+        switch (equippedCarId) {
+            case RED_RACER -> {
+                phaseDashActive = true;
+                empFieldActive = false;
+                timeWarpActive = false;
+                tipLabel.setText("Phantom Dash đang kích hoạt: xe mờ đi và xuyên xe AI trong " + formatSeconds(upgradedSkillDuration));
+            }
+            case BLUE_STORM -> {
+                phaseDashActive = false;
+                empFieldActive = true;
+                timeWarpActive = false;
+                empPulseTick = 0;
+                tipLabel.setText("EMP Pulse đang kích hoạt: bắn điện phá xe phía trước trong " + formatSeconds(upgradedSkillDuration));
+            }
+            case GREEN_SHADOW -> {
+                phaseDashActive = false;
+                empFieldActive = false;
+                timeWarpActive = true;
+                tipLabel.setText("Time Warp đang kích hoạt: làm chậm xe AI trong " + formatSeconds(upgradedSkillDuration));
+            }
+            default -> {
+                phaseDashActive = true;
+                empFieldActive = false;
+                timeWarpActive = false;
+                tipLabel.setText("Skill đang kích hoạt trong " + formatSeconds(upgradedSkillDuration));
+            }
+        }
+
+        refreshPlayerVisualState();
+    }
+
+    private void refreshPlayerVisualState() {
+        double opacity = phaseDashActive ? 0.48 : 1.0;
+
+        if (invulnerableTime > 0) {
+            boolean blink = ((int) (invulnerableTime * 10)) % 2 == 0;
+            if (blink) {
+                opacity = Math.min(opacity, 0.42);
+            }
+        }
+
+        playerActor.setOpacity(opacity);
+
+        if (phaseDashActive) {
+            playerActor.setStyle("""
+                -fx-effect: dropshadow(gaussian, rgba(190,160,255,0.98), 28, 0.50, 0, 0);
+            """);
+        } else if (empFieldActive) {
+            playerActor.setStyle("""
+                -fx-effect: dropshadow(gaussian, rgba(110,230,255,0.96), 28, 0.50, 0, 0);
+            """);
+        } else if (timeWarpActive) {
+            playerActor.setStyle("""
+                -fx-effect: dropshadow(gaussian, rgba(255,245,150,0.96), 28, 0.50, 0, 0);
+            """);
+        } else {
+            playerActor.setStyle("");
+        }
+    }
+
+    private String skillDisplayName() {
+        return switch (equippedCarId) {
+            case RED_RACER -> "Phantom Dash";
+            case BLUE_STORM -> "EMP Pulse";
+            case GREEN_SHADOW -> "Time Warp";
+            default -> currentSkill != null ? currentSkill.shortLabel() : "Skill";
+        };
+    }
+
+    private AiCar findNearestAiAhead(double range) {
+        AiCar target = null;
+        double bestGap = Double.MAX_VALUE;
+
+        for (AiCar aiCar : aiCars) {
+            if (!aiCar.actor.isVisible()) {
+                continue;
+            }
+
+            double gapY = PLAYER_Y - aiCar.screenY;
+            if (gapY < 0 || gapY > range) {
+                continue;
+            }
+
+            double lanePenalty = Math.abs(aiCar.x - playerX) * 0.35;
+            double score = gapY + lanePenalty;
+
+            if (score < bestGap) {
+                bestGap = score;
+                target = aiCar;
+            }
+        }
+
+        return target;
+    }
+
+    private void fireEmpShotAtNearestAiAhead(double range) {
+        AiCar target = findNearestAiAhead(range);
+        if (target == null) {
+            return;
+        }
+
+        createEmpShotEffect(playerX, PLAYER_Y - 22, target.x, target.screenY + 8);
+        target.actor.setVisible(false);
+        respawnAiCar(target);
+    }
+
+    private void createEmpShotEffect(double startX, double startY, double endX, double endY) {
+        EmpShotEffect effect = new EmpShotEffect(startX, startY, endX, endY);
+        empShotEffects.add(effect);
+        effectLayer.getChildren().addAll(effect.outerBeam, effect.coreBeam, effect.impactDot);
+    }
+
+    private void updateEffects(double dt) {
+        for (int i = empShotEffects.size() - 1; i >= 0; i--) {
+            EmpShotEffect effect = empShotEffects.get(i);
+            effect.lifeRemaining -= dt;
+
+            double alpha = clamp(effect.lifeRemaining / EMP_BEAM_LIFETIME, 0, 1);
+            effect.outerBeam.setStroke(Color.rgb(110, 230, 255, alpha * 0.55));
+            effect.coreBeam.setStroke(Color.rgb(240, 255, 255, alpha * 0.96));
+            effect.impactDot.setFill(Color.rgb(190, 245, 255, alpha * 0.9));
+
+            if (effect.lifeRemaining <= 0) {
+                effectLayer.getChildren().removeAll(effect.outerBeam, effect.coreBeam, effect.impactDot);
+                empShotEffects.remove(i);
+            }
+        }
+    }
+
     private void updateAiCars(double dt) {
+        double skillFactor = timeWarpActive ? TIME_WARP_FACTOR : 1.0;
+
         for (int lane = 0; lane < LANE_COUNT; lane++) {
             List<AiCar> laneCars = new ArrayList<>();
 
@@ -513,7 +773,7 @@ public class RaceScene implements AppScene {
             for (int i = 0; i < laneCars.size(); i++) {
                 AiCar aiCar = laneCars.get(i);
 
-                double nextY = aiCar.screenY + (aiCar.speed + playerSpeed * 0.35) * dt;
+                double nextY = aiCar.screenY + (aiCar.speed * skillFactor + playerSpeed * 0.35 * skillFactor) * dt;
 
                 if (i < laneCars.size() - 1) {
                     AiCar frontCar = laneCars.get(i + 1);
@@ -534,7 +794,7 @@ public class RaceScene implements AppScene {
             }
         }
 
-        if (invulnerableTime > 0) {
+        if (invulnerableTime > 0 || phaseDashActive) {
             return;
         }
 
@@ -643,7 +903,7 @@ public class RaceScene implements AppScene {
         }
 
         playerSpeed = 0;
-        playerActor.setOpacity(1.0);
+        playerActor.setStyle("");
 
         Platform.runLater(() -> {
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -775,7 +1035,6 @@ public class RaceScene implements AppScene {
     }
 
     private void drawNorthDecor(GraphicsContext gc) {
-        // Hồ / núi / sương
         gc.setFill(Color.rgb(0, 80, 120, 0.30));
         gc.fillRoundRect(20, 110, ROAD_X - 40, 220, 40, 40);
 
@@ -801,7 +1060,6 @@ public class RaceScene implements AppScene {
     }
 
     private void drawCentralDecor(GraphicsContext gc) {
-        // Nắng - biển - đồi cát
         gc.setFill(Color.rgb(0, 110, 170, 0.28));
         gc.fillRect(0, 0, ROAD_X, VIEW_H);
         gc.fillRect(ROAD_X + ROAD_W, 0, VIEW_W - (ROAD_X + ROAD_W), VIEW_H);
@@ -819,7 +1077,6 @@ public class RaceScene implements AppScene {
     }
 
     private void drawSouthDecor(GraphicsContext gc) {
-        // Sông nước - cây dừa - đồng bằng
         gc.setFill(Color.rgb(0, 120, 160, 0.25));
         gc.fillRoundRect(18, 150, ROAD_X - 36, 160, 30, 30);
         gc.fillRoundRect(ROAD_X + ROAD_W + 18, 220, VIEW_W - (ROAD_X + ROAD_W) - 36, 170, 30, 30);
@@ -968,6 +1225,23 @@ public class RaceScene implements AppScene {
         distanceLabel.setText("Quãng đường: " + (int) playerDistance + " / " + (int) currentTrackLength + " km");
         mapLabel.setText("Map: " + mapDisplayName());
         crashLabel.setText("Va chạm: " + hitCount + " / " + MAX_HITS);
+
+        if (currentSkill != null) {
+            skillLabel.setText("Skill: " + skillDisplayName());
+
+            String stateText;
+            if (skillActiveRemaining > 0) {
+                stateText = "Đang dùng " + formatSeconds(skillActiveRemaining);
+            } else if (skillCooldownRemaining > 0) {
+                stateText = "Hồi chiêu " + formatSeconds(skillCooldownRemaining);
+            } else {
+                stateText = "Sẵn sàng • " + formatSeconds(upgradedSkillDuration);
+            }
+            skillStateLabel.setText(stateText);
+        } else {
+            skillLabel.setText("Skill: Không có");
+            skillStateLabel.setText("");
+        }
     }
 
     private void finishRace() {
@@ -1055,6 +1329,7 @@ public class RaceScene implements AppScene {
             case NORTH -> "Miền Bắc";
             case CENTRAL -> "Miền Trung";
             case SOUTH -> "Miền Nam";
+            default -> "Miền Bắc";
         };
     }
 
@@ -1072,6 +1347,7 @@ public class RaceScene implements AppScene {
             case NORTH -> NORTH_TRACK_LENGTH;
             case CENTRAL -> CENTRAL_TRACK_LENGTH;
             case SOUTH -> SOUTH_TRACK_LENGTH;
+            default -> NORTH_TRACK_LENGTH;
         };
     }
 
@@ -1111,6 +1387,32 @@ public class RaceScene implements AppScene {
 
     private double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private String formatSeconds(double seconds) {
+        return String.format("%.1fs", seconds);
+    }
+
+    private final class EmpShotEffect {
+        private final Line outerBeam;
+        private final Line coreBeam;
+        private final Circle impactDot;
+        private double lifeRemaining = EMP_BEAM_LIFETIME;
+
+        private EmpShotEffect(double startX, double startY, double endX, double endY) {
+            this.outerBeam = new Line(startX, startY, endX, endY);
+            this.outerBeam.setStrokeWidth(8);
+            this.outerBeam.setStrokeLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
+            this.outerBeam.getStrokeDashArray().addAll(10.0, 8.0);
+
+            this.coreBeam = new Line(startX, startY, endX, endY);
+            this.coreBeam.setStrokeWidth(3);
+            this.coreBeam.setStrokeLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
+
+            this.impactDot = new Circle(endX, endY, 7);
+            this.impactDot.setStroke(Color.rgb(255, 255, 255, 0.92));
+            this.impactDot.setStrokeWidth(1.6);
+        }
     }
 
     private final class AiCar {
